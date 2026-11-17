@@ -41,6 +41,11 @@ jobs:
           restore-keys: daily-
       - uses: actions/cache/restore@v4
         with:
+          path: cache/info.json
+          key: info-${{ github.run_id }}
+          restore-keys: info-
+      - uses: actions/cache/restore@v4
+        with:
           path: logos
           key: logos-${{ github.run_id }}
           restore-keys: logos-
@@ -52,6 +57,18 @@ jobs:
         with:
           path: cache/daily.json
           key: daily-${{ github.run_id }}
+      # 종목정보·뉴스 (실패해도 사이트 배포는 계속)
+      - name: info
+        id: info
+        if: steps.fetch.outputs.ran == 'true'
+        continue-on-error: true
+        timeout-minutes: 12
+        run: python3 scripts/info.py ${{ inputs.force && '--force' || '' }}
+      - uses: actions/cache/save@v4
+        if: steps.info.outputs.info_changed == 'true'
+        with:
+          path: cache/info.json
+          key: info-${{ github.run_id }}
       - name: logos
         id: logos
         if: steps.fetch.outputs.ran == 'true'
@@ -71,7 +88,7 @@ jobs:
           git add status/last_daily.txt && git commit -m "status: daily refresh" && git push || true
       - name: site
         if: steps.fetch.outputs.ran == 'true'
-        run: mkdir -p _site && cp -r index.html version.js app.js style.css sw.js manifest.webmanifest data.json all.json icons logos _site/ && touch _site/.nojekyll
+        run: mkdir -p _site && cp -r index.html version.js app.js style.css sw.js manifest.webmanifest data.json all.json icons logos _site/ && (cp info.json _site/ || true) && touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         if: steps.fetch.outputs.ran == 'true'
         with:

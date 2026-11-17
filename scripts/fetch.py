@@ -359,7 +359,8 @@ def main():
                 rows = rows[:-1]  # 진행 중인 오늘 봉 제외
             rec = {"code": sym, "n": sym, "full": m.get("shortName") or sym, "p": m["regularMarketPrice"],
                    "c": round(pct, 2) if pct is not None else None, "cur": "USD",
-                   "at": dt.datetime.fromtimestamp(m["regularMarketTime"], KST).isoformat(timespec="minutes")}
+                   "at": dt.datetime.fromtimestamp(m["regularMarketTime"], KST).isoformat(timespec="minutes"),
+                   "h52": m.get("fiftyTwoWeekHigh"), "l52": m.get("fiftyTwoWeekLow")}
             lc = lv_compact(round_levels(levels(m["regularMarketPrice"], sr_from_rows(rows)), kr=False))
             if lc: rec["l"], rec["lw"] = lc
             overseas.append(rec)
@@ -367,11 +368,11 @@ def main():
             ERRORS.append(f"yahoo {sym}: {e}")
             overseas.append({"code": sym, "n": sym, "p": None, "c": None, "cur": "USD"})
     if CFG["coins"]:
-        cg = get("https://api.coingecko.com/api/v3/simple/price?ids=" + ",".join(CFG["coins"]) + "&vs_currencies=usd,krw&include_24hr_change=true") or {}
+        cg = get("https://api.coingecko.com/api/v3/simple/price?ids=" + ",".join(CFG["coins"]) + "&vs_currencies=usd,krw&include_24hr_change=true&include_market_cap=true") or {}
         for cid in CFG["coins"]:
             x = cg.get(cid, {})
             overseas.append({"code": cid, "n": CFG["coin_names"].get(cid, cid), "full": "CoinGecko 24시간 기준", "p": x.get("usd"), "krw": x.get("krw"),
-                             "c": round(x["usd_24h_change"], 2) if x.get("usd_24h_change") is not None else None, "cur": "USD"})
+                             "c": round(x["usd_24h_change"], 2) if x.get("usd_24h_change") is not None else None, "cur": "USD", "mcap": x.get("usd_market_cap")})
 
     F, I = idx["KOSPI"]["foreign"], idx["KOSPI"]["institution"]
     def who(v, n): return f"{n} {'순매수' if v > 0 else '순매도'} {abs(v):,.0f}억" if v is not None else f"{n} 데이터 없음"

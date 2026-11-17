@@ -192,11 +192,12 @@ function stockCard(code, opt = {}) {
   }
   const L_ = lvl(r.s);
   return `<div class="card">
-    <div class="row"><div><div class="name nm">${logo(code, r.n)}<span>${esc(r.n)} <span class="meta">${code}</span></span></div>
+    <div class="row"><div><div class="name nm tap" data-act="info" data-code="${code}">${logo(code, r.n)}<span>${esc(r.n)} <span class="meta">${code}</span> <span class="ibtn">ⓘ</span></span></div>
       <div class="meta">${money(r.p)} <span class="${cls(r.c)}">${pct(r.c)}</span>${r.sec ? ' · ' + esc(r.sec) : ''}</div></div>
       <button class="sbtn c-${L_}" data-toggle="${id}"><span class="score">${r.s ?? '–'}</span><span class="badge b-${L_}">${lbl(r.s)}</span><span class="meta">왜? ▾</span></button></div>
     <div class="bar"><i style="width:${(r.s || 0) * 10}%;background:${COLOR[L_]}"></i></div>
     ${opt.tag ? `<div class="tags">${opt.tag}</div>` : ''}
+    ${whyHTML(r.f, r.sec)}
     ${OPEN.has(id) ? detailHTML(id, r) : ''}
     ${pl}${gauge(r.p, L, c.sw[code] ? null : r.lw, false, !!c.sw[code])}
     ${actions(code, c)}
@@ -221,6 +222,7 @@ function sectorCard(s, i) {
       <div class="meta"><span class="${cls(s.c)}">${pct(s.c)}</span> · 오른 ${s.rise} / 내린 ${s.fall} · ${s.cnt}종목</div></div>
       <button class="sbtn c-${L_}" data-toggle="d${id}"><span class="score">${s.s}</span><span class="badge b-${L_}">${lbl(s.s)}</span><span class="meta">왜? ▾</span></button></div>
     <div class="bar"><i style="width:${s.s * 10}%;background:${COLOR[L_]}"></i></div>
+    ${whyHTML(s.f, null, true)}
     ${dopen ? detailHTML(id, s, true) : ''}
     <button class="pickbtn" data-toggle="${id}">${open ? '▲ 탑픽 접기' : `▼ 이 업종 탑픽 3 보기`}</button>
     ${open ? `<div class="picks">${(s.picks || []).length ? s.picks.map(c => stockCard(c, { k: '-' + s.n })).join('') : '<div class="meta">거래대금 기준을 넘는 종목이 없어요.</div>'}
@@ -230,7 +232,7 @@ function sectorCard(s, i) {
 function overseasCard(o, c) {
   const L = c.sw[o.code] ? [c.sw[o.code][0], c.sw[o.code][1], c.sw[o.code][4], c.sw[o.code][2], c.sw[o.code][3]] : o.l;
   const isCoin = !o.at;
-  return `<div class="card"><div class="row"><div><div class="name nm">${logo(o.code, o.n)}<span>${esc(o.n)}</span></div><div class="meta">${esc(o.full || '')}${o.at ? ' · ' + kst(o.at) + ' 기준' : ''}</div>
+  return `<div class="card"><div class="row"><div><div class="name nm tap" data-act="info" data-code="${esc(o.code)}">${logo(o.code, o.n)}<span>${esc(o.n)} <span class="ibtn">ⓘ</span></span></div><div class="meta">${esc(o.full || '')}${o.at ? ' · ' + kst(o.at) + ' 기준' : ''}</div>
     <span class="badge b-n">해외·코인 · 점수 없음</span></div>
     <div style="text-align:right"><div class="name">${money(o.p, true)}</div><div class="${cls(o.c)}">${pct(o.c)}</div>${o.krw ? `<div class="meta">${fmt(o.krw, 1)}원</div>` : ''}</div></div>
     ${isCoin && !L ? '<div class="meta" style="margin-top:8px">코인은 무료 일봉(고가·저가) 데이터가 없어 가격 범위는 생략해요.</div>' : gauge(o.p, L, c.sw[o.code] ? null : o.lw, true, !!c.sw[o.code])}</div>`;
@@ -238,6 +240,90 @@ function overseasCard(o, c) {
 
 function osCard(o, c) {   // 해외·코인 카드 + 보유 추가/빼기 버튼
   return overseasCard(o, c).replace(/<\/div>$/, '') + `<div class="acts"><button class="mini" data-act="os" data-code="${esc(o.code)}">${c.os.includes(o.code) ? '− 보유에서 빼기' : '+ 보유'}</button></div></div>`;
+}
+// ---------- 돈이 왜 몰리는지 (수급·거래 데이터로 만든 한 줄) ----------
+function secOf(name) { return name && DATA ? (DATA.sectors_all || []).find(s => s.n === name) : null; }
+function whyMoney(f, secName, isSector) {
+  f = f || {}; const pos = [], neg = [];
+  const who = isSector ? '상위 종목 ' : '';
+  if (f.sk >= 2) pos.push(`${who}외국인·기관 ${f.sk}일 연속 순매수`);
+  else if (f.sk <= -2) neg.push(`${who}외국인·기관 ${-f.sk}일 연속 순매도`);
+  if (f.fo != null && f.oo != null && Math.abs(f.sk || 0) < 2) {
+    if (f.fo > 0 && f.oo > 0) pos.push(`외국인·기관 함께 순매수 (외 ${eok(f.fo)}, 기 ${eok(f.oo)})`);
+    else if (f.fo > 0) pos.push(`외국인 순매수 ${eok(f.fo)}`);
+    else if (f.oo > 0) pos.push(`기관 순매수 ${eok(f.oo)}`);
+    else if (f.fo < 0 && f.oo < 0) neg.push(`외국인·기관 함께 순매도`);
+  }
+  if (f.pace >= 1.5) pos.push(`거래대금 평소의 ${f.pace}배`);
+  else if (f.pace != null && f.pace < 0.6) neg.push(`거래 한산 (평소의 ${f.pace}배)`);
+  if (f.rel >= 1.5) pos.push(`시장보다 ${f.rel}%p 강세`);
+  else if (f.rel <= -1.5) neg.push(`시장보다 ${Math.abs(f.rel)}%p 약세`);
+  if (isSector) { if (f.br >= 65) pos.push(`업종 안 ${f.br}% 종목 상승`); else if (f.br != null && f.br <= 30) neg.push(`업종 안 오른 종목 ${f.br}%뿐`); }
+  else { const s = secOf(secName); if (s && s.cnt >= 3 && s.c > 0 && s.rise / s.cnt >= 0.6) pos.push(`업종 동반 상승 (${esc(s.n)} ${pct(s.c)})`); }
+  const where = f.p52 != null && f.p52 <= 10 ? ' · 가격은 52주 바닥권' : f.p52 >= 90 ? ' · 가격은 52주 고점권' : '';
+  if (!pos.length && !neg.length) return f.fd ? '뚜렷한 쏠림 없음 · 수급·거래가 평소와 비슷해요' + where : '';
+  const head = pos.length > neg.length ? '💰 돈이 들어오는 중' : neg.length > pos.length ? '💸 돈이 빠지는 중' : '⚖️ 들어오고 나가는 게 섞임';
+  return `${head}: ${[...pos.map(x => '+ ' + x), ...neg.map(x => '− ' + x)].join(' · ')}${where}`;
+}
+const whyHTML = (f, sec, isSector) => { const w = whyMoney(f, sec, isSector); return w ? `<div class="whyline">${w}<span class="meta"> (${f && f.fd ? `수급 ${md(f.fd)} · ` : ''}거래 데이터 기준, 보장 아님)</span></div>` : ''; };
+
+// ---------- 종목정보 (info.json, 처음 열 때 한 번 받음) ----------
+let INFO = null, INFO_AT = 0;
+async function loadInfo() {
+  if (INFO && Date.now() - INFO_AT < 30 * 60e3) return INFO;
+  try { const j = await (await fetch('info.json?t=' + Date.now(), { cache: 'no-store' })).json(); INFO = j; INFO_AT = Date.now(); } catch { INFO = INFO || { s: {}, news: {} }; }
+  return INFO;
+}
+const jo = v => v == null ? '–' : Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(Math.abs(v) >= 100000 ? 1 : 2)}조` : `${fmt(v)}억`;
+function yoy(v, v0) {
+  if (v == null || v0 == null) return '';
+  if (v0 <= 0 && v > 0) return '<span class="up">흑자전환</span>';
+  if (v0 > 0 && v <= 0) return '<span class="dn">적자전환</span>';
+  if (v0 <= 0 && v <= 0) return '<span class="dn">적자지속</span>';
+  const p = (v / v0 - 1) * 100; return `<span class="${cls(p)}">${p > 0 ? '+' : ''}${p.toFixed(1)}%</span>`;
+}
+const perLabel = (k, q) => !k ? '' : q ? `${k.slice(0, 4)}년 ${Math.ceil(+k.slice(4, 6) / 3)}분기` : `${k.slice(0, 4)}년`;
+function finTable(x, q) {
+  if (!x) return '';
+  const row = (n, k) => `<tr><td>${n}</td><td><b>${jo(x[k])}</b></td><td>${yoy(x[k], x[k + '0'])}</td></tr>`;
+  return `<div class="fin"><div class="fh">${q ? '최근 분기' : '최근 연간'} · ${perLabel(x.p, q)}${x.p0 ? ` <span class="meta">(전년 ${perLabel(x.p0, q)} 대비)</span>` : ''}</div>
+    <table>${row('매출액', 'rev')}${row('영업이익', 'op')}${row('순이익', 'ni')}</table></div>`;
+}
+const ndt = s => s && s.length >= 8 ? `${+s.slice(4, 6)}/${+s.slice(6, 8)}${s.length >= 12 ? ' ' + s.slice(8, 10) + ':' + s.slice(10, 12) : ''}` : '';
+async function openInfo(code) {
+  const ov = (DATA.overseas || []).find(o => o.code === code);
+  const r = ALL[code] || (DATA.stocks_top || []).find(s => s.code === code) || ov;
+  if (!r) return;
+  const m = modal(`<div class="sheet-h"><div class="name nm">${logo(code, r.n)}<span>${esc(r.n)} <span class="meta">${esc(code)}</span></span></div><button class="mini" id="mcancel">닫기</button></div><div id="infobody" class="meta">불러오는 중…</div>`);
+  m.classList.add('sheet'); m.querySelector('#mcancel').onclick = closeModal;
+  if (ov) { $('#infobody').innerHTML = overseasInfo(ov); return; }
+  const I = await loadInfo(); const x = (I.s || {})[code], nw = (I.news || {})[code] || [];
+  const body = $('#infobody'); if (!body) return;
+  const g = (k, v) => `<div class="kv"><span>${k}</span><b>${v ?? '–'}</b></div>`;
+  const f = r.f || {};
+  let h = `<div class="meta" style="margin-bottom:6px">${money(r.p)} <span class="${cls(r.c)}">${pct(r.c)}</span>${r.sec ? ' · 업종 ' + esc(r.sec) : ''}${r.s != null ? ` · 점수 <b>${r.s}</b>` : ''}</div>`;
+  h += `<h3>💡 돈이 왜 몰리는지</h3>${whyHTML(f, r.sec) || '<div class="meta">수급 데이터가 없어요.</div>'}`;
+  if (nw.length) h += `<div class="news">${nw.map(([t, d, u, o]) => `<a href="${esc(u)}" target="_blank" rel="noopener">📰 ${esc(t)}</a><span class="meta">${esc(o)} · ${ndt(d)}</span>`).join('')}</div>
+    <div class="meta">뉴스는 네이버 증권이 이 종목에 연결한 최근 기사예요. 주가가 움직인 이유라고 보장하지 않아요.</div>`;
+  if (!x) { h += `<h3>🏢 종목정보</h3><div class="card meta">정보 없음 · 종목정보는 20일 평균 거래대금 30억 이상 종목과 Top·탑픽 종목만 매일 모아요.</div>`; body.innerHTML = h; return; }
+  if (x.d) h += `<h3>🏢 회사 소개</h3><div class="desc">${esc(x.d)}</div>`;
+  h += `<h3>📊 종목정보 <span class="meta">${esc(x.t)} 기준</span></h3><div class="kvs">
+    ${g('시가총액', esc(x.mc))}${g('업종', esc(r.sec || '–'))}${g('PER', esc(x.per))}${g('PBR', esc(x.pbr))}
+    ${g('ROE', x.roe != null ? x.roe + '%' + (x.roep ? ` <span class="meta">(${x.roep.slice(0, 4)})</span>` : '') : '–')}${g('배당수익률', esc(x.dy))}
+    ${g('52주 최고', esc(x.h52) + '원')}${g('52주 최저', esc(x.l52) + '원')}${g('외국인 보유율', esc(x.fr))}${g('추정 PER', esc(x.cper))}</div>`;
+  h += finTable(x.a, false) + finTable(x.q, true);
+  if (x.tp) h += `<div class="meta" style="margin-top:6px">증권사 목표주가 평균 ${esc(x.tp[0])}원 (${esc(x.tp[1])}) · 참고만</div>`;
+  h += `<div class="meta" style="margin-top:8px">자료: 네이버 증권(지표·실적, 단위 억원 → 억/조 표시) · 회사 소개 FnGuide/WISEfn · 실적은 확정치 기준</div>`;
+  body.innerHTML = h;
+}
+function overseasInfo(o) {
+  const g = (k, v) => `<div class="kv"><span>${k}</span><b>${v ?? '–'}</b></div>`;
+  const usd = v => v == null ? '–' : '$' + fmt(v, v < 10 ? 3 : 2);
+  const big = v => v == null ? '–' : v >= 1e12 ? '$' + (v / 1e12).toFixed(2) + '조' : '$' + fmt(v / 1e8, 0) + '억';
+  return `<div class="meta" style="margin-bottom:6px">${esc(o.full || '')}</div><h3>📊 정보</h3><div class="kvs">
+    ${g('현재가', usd(o.p))}${g('등락', pct(o.c))}${o.mcap ? g('시가총액', big(o.mcap)) : ''}${o.krw ? g('원화', fmt(o.krw, 1) + '원') : ''}
+    ${o.h52 != null ? g('52주 최고', usd(o.h52)) : ''}${o.l52 != null ? g('52주 최저', usd(o.l52)) : ''}</div>
+    <div class="meta" style="margin-top:8px">${o.at ? '자료: Yahoo Finance (무료 자료라 시총·재무는 없어요)' : '자료: CoinGecko'}</div>`;
 }
 // ---------- 앱 설치 · 친구에게 공유 ----------
 const PLAIN_URL = 'https://dldnrwls0128-blip.github.io/money-flow/';   // 공유는 항상 이 주소만 (설정 링크 X)
@@ -545,6 +631,7 @@ document.addEventListener('click', e => {
   if (t.dataset.toggle) { const id = t.dataset.toggle; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); render({ full: true }); return; }
   const c = cfg(), code = t.dataset.code;
   if (t.dataset.act === 'pick') { pickLists(code); return; }
+  if (t.dataset.act === 'info') { openInfo(code); return; }
   if (t.dataset.act === 'install') { doInstall(); return; }
   if (t.dataset.act === 'share') { doShare(); return; }
   if (t.dataset.act === 'copylink') { copyLink(); return; }
