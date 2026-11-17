@@ -105,15 +105,28 @@ function gauge(price, L, W, usd, mine) {
   const pts = [st, bb, bt, sb, stp, price].filter(v => v != null);
   const lo = Math.min(...pts) * 0.97, hi = Math.max(...pts) * 1.03;
   const x = v => ((v - lo) / (hi - lo) * 100);
-  const seg = (a, b, c) => a == null || b == null || b <= a ? '' : `<i style="left:${x(a).toFixed(1)}%;width:${(x(b) - x(a)).toFixed(1)}%;background:${c}"></i>`;
+  const seg = (a, b, c, tip) => a == null || b == null || b <= a ? '' : `<i data-tip="${esc(tip)}" title="${esc(tip)}" style="left:${x(a).toFixed(1)}%;width:${(x(b) - x(a)).toFixed(1)}%;background:${c}"></i>`;
   const buyLow = bb ?? st, sellHi = stp ?? hi;
-  const bars = seg(lo, st, '#ef4444') + (bb != null ? seg(st, bb, '#475569') : '') + seg(bb ?? st, bt, '#3b82f6') + seg(bt, sb ?? hi, '#64748b') + seg(sb, sellHi, '#22c55e');
+  const dd = v => { const p = (v / price - 1) * 100; return `${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p).toFixed(1)}%`; };
+  const ddr = (a, b) => a == null || b == null || a === b ? dd(a ?? b) : `${dd(Math.min(a, b))}~${dd(Math.max(a, b))}`;
+  const T = {
+    stop: `손절 ${man(st, usd)} 아래 (현재가 대비 ${dd(st)})`,
+    buf: `손절선~매수 구간 사이 ${range(st, bb, usd)}`,
+    buy: `매수 구간 ${range(bb ?? st, bt, usd)} (현재가 대비 ${ddr(bb ?? st, bt)})`,
+    wait: `기다리는 구간 ${range(bt, sb ?? hi, usd)}`,
+    sell: sb != null ? `매도 구간 ${range(sb, stp ?? sb, usd)} (현재가 대비 ${ddr(sb, stp ?? sb)})` : '',
+    now: `현재가 ${man(price, usd)}`
+  };
+  const bars = seg(lo, st, '#ef4444', T.stop) + (bb != null ? seg(st, bb, '#475569', T.buf) : '') + seg(bb ?? st, bt, '#3b82f6', T.buy)
+    + seg(bt, sb ?? hi, '#64748b', T.wait) + seg(sb, sellHi, '#22c55e', T.sell);
   const mid = (a, b) => ((x(a) + x(b)) / 2).toFixed(1);
   const zl = [[mid(lo, st), '손절', 'r'], [mid(buyLow, bt), '매수', 'b']].concat(sb != null ? [[mid(sb, sellHi), '매도', 'g']] : [])
     .map((z, i, a) => { if (i) z[0] = Math.max(+z[0], +a[i - 1][0] + 13); z[0] = Math.min(Math.max(+z[0], 6), 94); return z; })
-    .map(([p, n, c]) => `<em class="z-${c}" style="left:${p}%">${n}</em>`).join('');
+    .map(([p, n, c]) => { const tp = c === 'r' ? T.stop : c === 'b' ? T.buy : T.sell; return `<em class="z-${c}" data-tip="${esc(tp)}" title="${esc(tp)}" style="left:${p}%">${n}</em>`; }).join('');
   let state, sc;
-  if (price <= st) { state = '🚨 손절 주의 · 손절선 아래 (종가로 확인)'; sc = 'r'; }
+  const nosup = W && W[0] && String(W[0]).startsWith('신저가');
+  if (nosup) { state = '⚠️ 52주 신저가 · 아래 지지선 없음 (반등 확인 뒤 매수)'; sc = 'r'; }
+  else if (price <= st) { state = '🚨 손절 주의 · 손절선 아래 (종가로 확인)'; sc = 'r'; }
   else if (bb != null && price < bb) { state = '⚠️ 매수 구간 아래 · 손절선 가까움'; sc = 'r'; }
   else if (price <= bt * 1.01) { state = '🔵 매수 구간'; sc = 'b'; }
   else if (sb == null) { state = '⏳ 매수 구간 위 · 위쪽 저항 없음(신고가권)'; sc = 'n'; }
@@ -134,8 +147,9 @@ function gauge(price, L, W, usd, mine) {
   const summary = `<div class="zsum"><span class="zb">매수 ${range(bb, bt, usd)}</span>${sb != null ? `<span class="zg">매도 ${range(sb, stp, usd)}</span>` : ''}<span class="zr">손절 ${man(st, usd)} 아래</span></div>`;
   return `<div class="gauge">
     <div class="state s-${sc}">${state}</div>${summary}
-    <div class="gwrap"><div class="mk" style="left:${x(price).toFixed(1)}%"><span>${man(price, usd)}</span>▼</div>
+    <div class="gwrap"><div class="mk" data-tip="${esc(T.now)}" title="${esc(T.now)}" style="left:${x(price).toFixed(1)}%"><span>${man(price, usd)}</span>▼</div>
       <div class="gbar">${bars}</div><div class="glab">${zl}</div></div>
+    <div class="meta tiphint">구간에 손가락을 대거나 마우스를 올리면 가격이 보여요</div>
     <details><summary>구간 자세히 ${mine ? '(내가 정한 계획)' : '(일봉 지지·저항 자동 계산)'}</summary>${rows.join('')}
     <div class="meta">${mine ? '내가 정한 계획이 자동값보다 우선해요.' : esc(DATA.levels_rule || '')}</div></details>
   </div>`;
@@ -364,6 +378,30 @@ async function load(manual) {
     return false;
   }
 }
+// ---------- 가격 띠 말풍선 (PC: 마우스 올리기 · 폰: 누르기) ----------
+const TIP = document.createElement('div'); TIP.id = 'tip'; TIP.hidden = true; document.body.appendChild(TIP);
+let tipEl = null;
+function showTip(el, cx) {
+  const t = el.dataset.tip; if (!t) return;
+  tipEl = el; TIP.textContent = t; TIP.hidden = false;
+  const r = el.getBoundingClientRect();
+  const x0 = cx != null ? cx : r.left + r.width / 2;
+  const w = TIP.offsetWidth, h = TIP.offsetHeight, vw = document.documentElement.clientWidth;
+  let left = Math.min(Math.max(8, x0 - w / 2), vw - w - 8);
+  let top = r.top - h - 10; if (top < 70) top = r.bottom + 10;
+  TIP.style.left = left + 'px'; TIP.style.top = (top + window.scrollY) + 'px';
+}
+function hideTip() { TIP.hidden = true; tipEl = null; }
+document.addEventListener('mouseover', e => { if (e.pointerType === 'touch') return; const el = e.target.closest('[data-tip]'); if (el) showTip(el, e.clientX); });
+document.addEventListener('mousemove', e => { const el = e.target.closest('[data-tip]'); if (el && el === tipEl && !TIP.dataset.pinned) showTip(el, e.clientX); });
+document.addEventListener('mouseout', e => { const el = e.target.closest('[data-tip]'); if (el && !TIP.dataset.pinned && !el.contains(e.relatedTarget)) hideTip(); });
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-tip]');
+  if (el) { e.preventDefault(); if (tipEl === el && TIP.dataset.pinned) { delete TIP.dataset.pinned; hideTip(); } else { showTip(el, e.clientX); TIP.dataset.pinned = '1'; } return; }
+  if (!e.target.closest('#tip')) { delete TIP.dataset.pinned; hideTip(); }
+}, true);
+window.addEventListener('scroll', () => { if (!TIP.hidden) { delete TIP.dataset.pinned; hideTip(); } }, { passive: true });
+
 // ---------- 버전 표시 · 새 버전 안내 ----------
 // 예전 버전 화면(index.html)이 남아 있어도 멈추지 않도록 필요한 요소를 직접 만든다
 (function ensureShell() {

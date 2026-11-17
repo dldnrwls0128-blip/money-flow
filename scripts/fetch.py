@@ -100,16 +100,21 @@ def levels(c, sr, base_pct=None):
         b1 = min10
     else:  # 최근 저점을 이미 깨고 내려온 경우: 현재가 아래 가장 가까운 실제 저점
         b1 = max((x for x in S if x[0] <= c), key=lambda x: x[0], default=None)
-    if not b1: return None
+    nosup = False
+    if not b1:  # 52주 저점까지 깨고 내려와 아래에 실제 지지선이 없는 경우 (신저가)
+        nosup = True
+        b1 = [c, "신저가: 아래 지지선 없음 → 현재가"]
     b2 = max((x for x in S if x[0] <= b1[0] * 0.97), key=lambda x: x[0], default=None)
-    lv = {"buy1": b1[0], "buy1_why": b1[1]}
+    if nosup:
+        b2 = [c * 0.97, "신저가: 현재가 −3%"]
+    lv = {"buy1": b1[0], "buy1_why": b1[1], "nosup": nosup}
     if b2:
         lv.update(buy2=b2[0], buy2_why=b2[1])
         st = max((x for x in S if x[0] <= b2[0] * 0.965), key=lambda x: x[0], default=None)
         if st:
             lv.update(stop=st[0] * 0.995, stop_why=st[1] + " 바로 밑")
         else:
-            lv.update(stop=b2[0] * 0.96, stop_why="더 낮은 일봉 저점이 없어 매수 구간 하단 −4%")
+            lv.update(stop=b2[0] * 0.96, stop_why="더 낮은 일봉 저점이 없어 매수 구간 아래쪽 −4%")
     else:
         lv.update(stop=b1[0] * 0.96, stop_why="더 낮은 일봉 저점이 없어 매수가 −4%")
     s1 = min((x for x in R if x[0] >= max(b1[0] * 1.04, c)), key=lambda x: x[0], default=None)
@@ -198,7 +203,7 @@ def lv_compact(lv):
 LEVEL_RULE = ("매수 구간: 위쪽=최근 10일 저점(이미 깨졌으면 그 아래 가장 가까운 일봉 저점), 아래쪽=그보다 3% 이상 낮은 일봉 저점. "
               "손절선=매수 구간 아래쪽보다 3.5% 이상 낮은 실제 일봉 저점 바로 밑. "
               "매도 구간: 아래쪽=매수 구간 위쪽보다 4% 이상·현재가 이상인 가장 가까운 고점, 위쪽=그보다 4% 이상 높은 다음 고점(60일·52주 고점 포함). "
-              "수익률은 매수 구간 위쪽 가격 기준.")
+              "52주 저점까지 깨져 아래 지지선이 없으면(신저가) 매수 구간=현재가~−3%, 손절선=그 아래 −4%로 두고 '반등 확인 뒤 매수'로 표시. 수익률은 매수 구간 위쪽 가격 기준.")
 
 def all_quotes():
     out = {}
