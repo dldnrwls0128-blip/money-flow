@@ -60,8 +60,10 @@ def stock_daily(code):
     if not hist:
         return None
     tv20 = [r[4] * r[5] for r in hist[-20:]]
+    y1 = [r for r in full[-250:] if r[2] > 0 and r[3] > 0] or hist   # 52주 = 최근 약 250거래일 (거래정지 0값 제외)
     return {"flows": flows, "hi60": max(r[2] for r in hist), "lo60": min(r[3] for r in hist),
-            "hi52": max(r[2] for r in full), "lo52": min(r[3] for r in full),
+            "hi52": max(r[2] for r in y1), "lo52": min(r[3] for r in y1),
+            "hi52d": max(y1, key=lambda r: r[2])[0], "lo52d": min(y1, key=lambda r: r[3])[0],
             "avgtv20": sum(tv20) / len(tv20), "last": hist[-1][0],
             "sr": sr_from_rows([(r[0], r[2], r[3]) for r in full])}
 
@@ -272,12 +274,12 @@ def main():
     cpath = os.path.join(ROOT, "cache", "daily.json")
     cache = json.load(open(cpath, encoding="utf-8")) if os.path.exists(cpath) else {}
     today = now.strftime("%Y%m%d")
-    full = force or cache.get("v") != 3 or (hm >= 1750 and cache.get("key") != today)
+    full = force or cache.get("v") != 4 or (hm >= 1750 and cache.get("key") != today)
     changed = False
     if full:
         codes = sorted(set(quotes) | set(core))
         print("일별 데이터 전 종목 새로 받는 중:", len(codes)); t0 = time.time()
-        cache = {"v": 3, "key": today if hm >= 1750 else "day-" + today, "made": now.isoformat(timespec="minutes"), "stocks": build_daily(codes)}
+        cache = {"v": 4, "key": today if hm >= 1750 else "day-" + today, "made": now.isoformat(timespec="minutes"), "stocks": build_daily(codes)}
         print("일별 완료", round(time.time() - t0), "초", len(cache["stocks"])); changed = True
     else:
         miss = [c for c in core if c not in cache["stocks"]]
@@ -301,6 +303,7 @@ def main():
                                        d["lo60"], d["hi60"], d.get("lo52"), d.get("hi52"))
             f["rk"] = rank.get(c); f["tot"] = len(rank)
             r.update(s=total, pt=pt, f=f, a20=round(d["avgtv20"] / 1e8))
+            if d.get("hi52d"): r["y52"] = [max(d["hi52"], q["price"] or 0), d["hi52d"], min(d["lo52"], q["price"] or d["lo52"]), d["lo52d"]]
             if PREF.search(q["name"]): r["pf"] = 1
             lc = lv_compact(round_levels(levels(q["price"], d.get("sr"))))
             if lc: r["l"], r["lw"] = lc

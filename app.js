@@ -310,11 +310,20 @@ async function openInfo(code) {
   h += `<h3>📊 종목정보 <span class="meta">${esc(x.t)} 기준</span></h3><div class="kvs">
     ${g('시가총액', esc(x.mc))}${g('업종', esc(r.sec || '–'))}${g('PER', esc(x.per))}${g('PBR', esc(x.pbr))}
     ${g('ROE', x.roe != null ? x.roe + '%' + (x.roep ? ` <span class="meta">(${x.roep.slice(0, 4)})</span>` : '') : '–')}${g('배당수익률', esc(x.dy))}
-    ${g('52주 최고', esc(x.h52) + '원')}${g('52주 최저', esc(x.l52) + '원')}${g('외국인 보유율', esc(x.fr))}${g('추정 PER', esc(x.cper))}</div>`;
+    ${y52html(r, x)}${g('외국인 보유율', esc(x.fr))}${g('추정 PER', esc(x.cper))}</div>`;
   h += finTable(x.a, false) + finTable(x.q, true);
   if (x.tp) h += `<div class="meta" style="margin-top:6px">증권사 목표주가 평균 ${esc(x.tp[0])}원 (${esc(x.tp[1])}) · 참고만</div>`;
-  h += `<div class="meta" style="margin-top:8px">자료: 네이버 증권(지표·실적, 단위 억원 → 억/조 표시) · 회사 소개 FnGuide/WISEfn · 실적은 확정치 기준</div>`;
+  h += `<div class="meta" style="margin-top:8px">자료: 네이버 증권(지표·실적, 단위 억원 → 억/조 표시) · 52주 고저는 최근 250거래일 일봉(수정주가)으로 직접 계산 · 회사 소개 FnGuide/WISEfn · 실적은 확정치 기준</div>`;
   body.innerHTML = h;
+}
+function y52html(r, x) {   // 52주 고/저: 우리 일봉(최근 약 250거래일, 수정주가) 기준. 네이버 표기와 20% 넘게 다르면 함께 표시
+  const g = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
+  const nv = s => { const v = Number(String(s || '').replace(/[^\d.]/g, '')); return v > 0 ? v : null; };
+  const y = r.y52; const nh = nv(x && x.h52), nl = nv(x && x.l52);
+  if (!y) return g('52주 최고', nh ? fmt(nh) + '원' : '–') + g('52주 최저', nl ? fmt(nl) + '원' : '–');
+  const off = (a, b) => a && b && Math.abs(a / b - 1) > 0.2;
+  const note = (v, d, n) => `${fmt(v)}원 <span class="meta">(${md(d)})</span>` + (off(n, v) ? `<div class="meta">네이버 표기 ${fmt(n)}원과 달라요 (액면분할 등 수정주가 차이)</div>` : '');
+  return g('52주 최고', note(y[0], y[1], nh)) + g('52주 최저', note(y[2], y[3], nl));
 }
 function overseasInfo(o) {
   const g = (k, v) => `<div class="kv"><span>${k}</span><b>${v ?? '–'}</b></div>`;
