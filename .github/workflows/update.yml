@@ -4,14 +4,14 @@ on:
     # KST = UTC+9. 평일 08:50~15:50 KST 10분마다 (UTC 전날 23:50 ~ 06:50)
     - cron: '50 23 * * 0-4'
     - cron: '*/10 0-6 * * 1-5'
-    # 장 마감 후 확정 수급 반영 (18:10 KST)
+    # 장 마감 후 전 종목 일별 데이터(수급·일봉) 갱신 (18:10 KST)
     - cron: '10 9 * * 1-5'
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
       force:
-        description: '일별 데이터까지 새로 받기'
+        description: '전 종목 일별 데이터까지 새로 받기 (약 5~6분)'
         type: boolean
         default: false
 permissions:
@@ -24,7 +24,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 30
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -33,27 +33,35 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      # 일별 데이터 캐시(약 5MB)는 git 대신 Actions 캐시에 보관
+      - uses: actions/cache/restore@v4
+        with:
+          path: cache/daily.json
+          key: daily-${{ github.run_id }}
+          restore-keys: daily-
       - name: fetch
         id: fetch
-        if: github.event_name != 'push'
         run: python3 scripts/fetch.py ${{ inputs.force && '--force' || '' }}
-      - name: commit
-        if: steps.fetch.outputs.ran == 'true'
+      - uses: actions/cache/save@v4
+        if: steps.fetch.outputs.cache_changed == 'true'
+        with:
+          path: cache/daily.json
+          key: daily-${{ github.run_id }}
+      # 하루 1번 작은 기록만 커밋 (스케줄이 60일 무활동으로 꺼지지 않게)
+      - name: daily heartbeat
+        if: steps.fetch.outputs.daily_full == 'true' && github.event_name == 'schedule'
         run: |
+          mkdir -p status && TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST 전 종목 일별 갱신' > status/last_daily.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
-          git add data.json cache/daily.json
-          if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
-          git commit -m "data: $(TZ=Asia/Seoul date '+%m/%d %H:%M') KST"
-          git pull --rebase -X theirs || true
-          git push
+          git add status/last_daily.txt && git commit -m "status: daily refresh" && git push || true
       - name: site
-        if: github.event_name == 'push' || steps.fetch.outputs.ran == 'true'
-        run: mkdir -p _site && cp -r index.html app.js style.css sw.js manifest.webmanifest data.json icons _site/ && touch _site/.nojekyll
+        if: steps.fetch.outputs.ran == 'true'
+        run: mkdir -p _site && cp -r index.html app.js style.css sw.js manifest.webmanifest data.json all.json icons _site/ && touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
-        if: github.event_name == 'push' || steps.fetch.outputs.ran == 'true'
+        if: steps.fetch.outputs.ran == 'true'
         with:
           path: _site
       - id: deploy
-        if: github.event_name == 'push' || steps.fetch.outputs.ran == 'true'
+        if: steps.fetch.outputs.ran == 'true'
         uses: actions/deploy-pages@v4

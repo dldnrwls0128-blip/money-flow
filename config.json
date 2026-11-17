@@ -25,5 +25,6 @@
   "coin_names": {
     "ondo-finance": "ONDO"
   },
-  "min_sector_tv_eok": 500
+  "min_sector_tv_eok": 500,
+  "min_pick_tv_eok": 30
 }
