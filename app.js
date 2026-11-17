@@ -239,10 +239,103 @@ function overseasCard(o, c) {
 function osCard(o, c) {   // 해외·코인 카드 + 보유 추가/빼기 버튼
   return overseasCard(o, c).replace(/<\/div>$/, '') + `<div class="acts"><button class="mini" data-act="os" data-code="${esc(o.code)}">${c.os.includes(o.code) ? '− 보유에서 빼기' : '+ 보유'}</button></div></div>`;
 }
+// ---------- 앱 설치 · 친구에게 공유 ----------
+const PLAIN_URL = 'https://dldnrwls0128-blip.github.io/money-flow/';   // 공유는 항상 이 주소만 (설정 링크 X)
+const UA = navigator.userAgent || '';
+const ENV = {
+  ios: /iPhone|iPad|iPod/i.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
+  android: /Android/i.test(UA),
+  kakao: /KAKAOTALK/i.test(UA),
+  inapp: /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|FB_IAB|Line\/|DaumApps|everytimeApp|SamsungBrowser\/[\d.]+ .*CrossApp|; wv\)/i.test(UA),
+  appName: /KAKAOTALK/i.test(UA) ? '카카오톡' : /NAVER\(inapp/i.test(UA) ? '네이버 앱' : /Instagram/i.test(UA) ? '인스타그램' : /FBAN|FBAV|FB_IAB/i.test(UA) ? '페이스북' : /Line\//i.test(UA) ? '라인' : /DaumApps/i.test(UA) ? '다음 앱' : '앱 안 브라우저',
+  iosOther: /CriOS|FxiOS|EdgiOS|Whale/i.test(UA)
+};
+const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+let INSTALL_EVT = null, INSTALLED = false;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); INSTALL_EVT = e; if (DATA && TAB === 'home') render({ full: true }); });
+window.addEventListener('appinstalled', () => { INSTALLED = true; INSTALL_EVT = null; closeModal(); if (DATA) render({ full: true }); });
+const showInstall = () => !isStandalone() && !INSTALLED;
+function openExternalURL() {
+  if (ENV.kakao && ENV.android) return 'intent://' + PLAIN_URL.replace(/^https:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
+  if (ENV.kakao && ENV.ios) return 'kakaotalk://web/openExternal?url=' + encodeURIComponent(PLAIN_URL);
+  return '';
+}
+const SVG_SHARE = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>';
+const SVG_ADD = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>';
+const SVG_DOTS = '<svg viewBox="0 0 24 24" width="26" height="26" fill="#e2e8f0"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
+const step = (n, icon, html) => `<div class="step"><span class="sn">${n}</span><span class="si">${icon}</span><span>${html}</span></div>`;
+function installSheet() {
+  if (ENV.inapp) {
+    const ext = openExternalURL(), br = ENV.ios ? '사파리' : '크롬', bro = ENV.ios ? '사파리로' : '크롬으로';
+    return modal(`<b>📲 ${bro} 열어 주세요</b>
+      <div class="meta" style="margin:6px 0 10px">${esc(ENV.appName)} 안에서는 앱 설치가 안 돼요. ${br}에서 열면 한 번에 설치할 수 있어요.</div>
+      ${ext ? `<a class="bigbtn" id="openext" href="${esc(ext)}">${bro} 열기</a>` : ''}
+      ${step(1, SVG_DOTS, `오른쪽 위(또는 아래) <b>⋮ / ⋯ 메뉴</b> 누르기`)}
+      ${step(2, '🌐', `<b>다른 브라우저로 열기</b> (또는 ${bro} 열기) 고르기`)}
+      ${step(3, '📲', `${br}에서 <b>📲 앱 설치</b> 누르기`)}
+      <div class="mrow"><button class="mini" data-act="copylink">🔗 링크 복사</button><button class="mini" id="mcancel">닫기</button></div>`);
+  }
+  if (ENV.ios) {
+    return modal(`<b>📲 아이폰에 설치하기</b>
+      ${ENV.iosOther ? '<div class="meta" style="margin:6px 0">사파리에서 하는 게 가장 확실해요. (크롬도 iOS 16.4 이상이면 같은 방법으로 돼요)</div>' : ''}
+      ${step(1, SVG_SHARE, `아래(또는 위) 막대의 <b>공유 버튼</b> 누르기`)}
+      ${step(2, SVG_ADD, `목록을 올려서 <b>홈 화면에 추가</b> 누르기`)}
+      ${step(3, '✅', `오른쪽 위 <b>추가</b> → 홈 화면에 <b>돈흐름</b> 아이콘이 생겨요`)}
+      <div class="mrow"><button class="mini" id="mcancel">알겠어요</button></div>`);
+  }
+  return modal(`<b>📲 앱 설치</b>
+    <div class="meta" style="margin:6px 0 10px">이미 설치했거나 브라우저가 바로 설치를 지원하지 않을 때는 이렇게 해 주세요.</div>
+    ${step(1, SVG_DOTS, `크롬 오른쪽 위 <b>⋮ 메뉴</b> 누르기`)}
+    ${step(2, SVG_ADD, `<b>앱 설치</b> 또는 <b>홈 화면에 추가</b> 누르기`)}
+    ${step(3, '✅', `홈 화면에 <b>돈흐름</b> 아이콘이 생겨요`)}
+    <div class="mrow"><button class="mini" id="mcancel">알겠어요</button></div>`);
+}
+async function doInstall() {
+  if (INSTALL_EVT && !ENV.inapp) {
+    const e = INSTALL_EVT; INSTALL_EVT = null;
+    try { await e.prompt(); const r = await e.userChoice; if (r && r.outcome === 'accepted') { INSTALLED = true; } } catch {}
+    render({ full: true }); return;
+  }
+  const m = installSheet(); const x = m.querySelector('#mcancel'); if (x) x.onclick = closeModal;
+}
+function flash(msg) { FLASH = msg; setUpdated(); setTimeout(() => { FLASH = ''; setUpdated(); }, 5000); }
+async function copyLink() {
+  try { await navigator.clipboard.writeText(PLAIN_URL); flash('🔗 링크를 복사했어요'); return true; } catch {}
+  const ta = document.createElement('textarea'); ta.value = PLAIN_URL; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch {} ta.remove();
+  if (ok) flash('🔗 링크를 복사했어요'); else prompt('이 주소를 복사해서 보내 주세요', PLAIN_URL);
+  return ok;
+}
+async function doShare() {
+  const data = { title: '돈흐름', text: '돈이 어디로 몰리는지 한눈에 보는 앱 (참고용)', url: PLAIN_URL };
+  if (navigator.share) { try { await navigator.share(data); return 'share'; } catch (e) { if (e && e.name === 'AbortError') return 'abort'; } }
+  await copyLink(); return 'copy';
+}
+function installCard() {
+  if (!showInstall() && !ENV.inapp) return '';
+  if (localStorage.getItem('mf_insthide') === '1' && !ENV.inapp) return '';
+  const msg = ENV.inapp ? `${esc(ENV.appName)} 안에서 열려 있어요. <b>${ENV.ios ? '사파리로' : '크롬으로'} 열면</b> 앱으로 설치할 수 있어요.`
+    : '홈 화면에 설치하면 앱처럼 바로 열려요.';
+  return `<div class="card instcard"><div>${msg}</div>
+    <div class="mrow" style="justify-content:flex-start;margin-top:10px">
+      <button class="bigbtn" data-act="install">📲 ${ENV.inapp ? (ENV.ios ? '사파리로' : '크롬으로') + ' 열기' : '앱 설치'}</button>
+      <button class="bigbtn alt" data-act="share">📤 친구에게 공유</button></div>
+    ${ENV.inapp ? '' : '<button class="linkbtn" data-act="hideinst">다음에 할게요</button>'}</div>`;
+}
+function shareHelpCard() {
+  return `<h2>📲 설치 · 친구에게 알려주기</h2>
+  <div class="card" style="text-align:center">
+    <img src="icons/qr.png" alt="돈흐름 QR 코드" width="240" height="300" style="border-radius:16px;max-width:70%;height:auto">
+    <div class="meta" style="margin:6px 0 10px">친구가 카메라로 찍으면 바로 열려요 · ${esc(PLAIN_URL)}</div>
+    <div class="mrow" style="justify-content:center">
+      ${showInstall() || ENV.inapp ? '<button class="bigbtn" data-act="install">📲 앱 설치</button>' : '<span class="meta">✅ 앱으로 실행 중이에요</span>'}
+      <button class="bigbtn alt" data-act="share">📤 친구에게 공유</button></div>
+    <div class="meta" style="margin-top:8px">공유하는 건 앱 주소뿐이에요. 내 종목·평단·계획은 이 폰에만 있고 같이 가지 않아요.</div></div>`;
+}
 // ---------- 화면 ----------
 function viewHome() {
   const D = DATA, K = D.index.KOSPI, Kq = D.index.KOSDAQ;
-  return `<div class="card headline">${esc(D.headline)}</div>
+  return installCard() + `<div class="card headline">${esc(D.headline)}</div>
   <div class="grid">
     <div class="card big"><div class="k">코스피</div><div class="v">${fmt(K.value, 2)}</div><div class="d ${cls(K.pct)}">${pct(K.pct)}</div></div>
     <div class="card big"><div class="k">코스닥</div><div class="v">${fmt(Kq.value, 2)}</div><div class="d ${cls(Kq.pct)}">${pct(Kq.pct)}</div></div>
@@ -378,6 +471,7 @@ function viewFind() {
 function viewHelp() {
   return `<div class="card"><b>앱 버전</b> v${esc(self.APP_VERSION)} · 배포 ${esc(self.APP_DATE)}
     <ul class="why">${(self.APP_CHANGES || []).map(([v, d, t]) => `<li><b>v${esc(v)}</b> (${esc(d)}) ${esc(t)}</li>`).join('')}</ul></div>
+  ${shareHelpCard()}
   <h2>❓ 점수와 가격선은 이렇게 정해요</h2>
   <div class="card"><b>점수 (10점 만점)</b><ul class="why">
     <li><b>수급 3점</b>: 전 거래일과 최근 3일 동안 외국인+기관 순매수가 거래량에서 차지하는 비율. 많이 살수록 높아요.</li>
@@ -451,6 +545,10 @@ document.addEventListener('click', e => {
   if (t.dataset.toggle) { const id = t.dataset.toggle; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); render({ full: true }); return; }
   const c = cfg(), code = t.dataset.code;
   if (t.dataset.act === 'pick') { pickLists(code); return; }
+  if (t.dataset.act === 'install') { doInstall(); return; }
+  if (t.dataset.act === 'share') { doShare(); return; }
+  if (t.dataset.act === 'copylink') { copyLink(); return; }
+  if (t.dataset.act === 'hideinst') { localStorage.setItem('mf_insthide', '1'); render({ full: true }); return; }
   if (t.dataset.act === 'bth') { localStorage.setItem('mf_bth', t.dataset.v); render({ full: true }); return; }
   if (t.dataset.act === 'bhide') { localStorage.setItem('mf_bhide', localStorage.getItem('mf_bhide') === '1' ? '0' : '1'); render({ full: true }); return; }
   if (t.dataset.act === 'wtab') { localStorage.setItem('mf_wtab', t.dataset.id); render({ full: true }); return; }
