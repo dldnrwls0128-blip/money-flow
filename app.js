@@ -80,7 +80,7 @@ function detailHTML(id, r, sector) {
 function man(v, usd) {
   if (v == null) return '–';
   if (usd) return '$' + fmt(v, v < 10 ? 3 : 2);
-  if (v >= 100000) return (Math.round(v / 100) / 100).toLocaleString('ko-KR', { maximumFractionDigits: 2 }) + '만';
+  if (v >= 100000) { const m = Math.round(v / 100) / 100; return m.toLocaleString('ko-KR', { minimumFractionDigits: Number.isInteger(m * 10) ? 1 : 2, maximumFractionDigits: 2 }) + '만'; }
   return fmt(v) + '원';
 }
 function range(a, b, usd) {   // a<=b
