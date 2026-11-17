@@ -1,0 +1,54 @@
+name: update-data
+on:
+  schedule:
+    # KST = UTC+9. 평일 08:50~15:50 KST 10분마다 (UTC 전날 23:50 ~ 06:50)
+    - cron: '50 23 * * 0-4'
+    - cron: '*/10 0-6 * * 1-5'
+    # 장 마감 후 확정 수급 반영 (18:10 KST)
+    - cron: '10 9 * * 1-5'
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: fetch
+        id: fetch
+        if: github.event_name != 'push'
+        run: python3 scripts/fetch.py
+      - name: commit
+        if: steps.fetch.outputs.ran == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git add data.json cache/daily.json
+          if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
+          git commit -m "data: $(TZ=Asia/Seoul date '+%m/%d %H:%M') KST"
+          git pull --rebase -X theirs || true
+          git push
+      - name: site
+        if: github.event_name == 'push' || steps.fetch.outputs.ran == 'true'
+        run: mkdir -p _site && cp -r index.html app.js style.css sw.js manifest.webmanifest data.json icons _site/ && touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push' || steps.fetch.outputs.ran == 'true'
+        with:
+          path: _site
+      - id: deploy
+        if: github.event_name == 'push' || steps.fetch.outputs.ran == 'true'
+        uses: actions/deploy-pages@v4

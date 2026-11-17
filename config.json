@@ -1,0 +1,29 @@
+{
+  "top_per_sector": 5,
+  "top_n": 5,
+  "min_avg_tv_eok": 50,
+  "min_mcap_eok": 3000,
+  "extra_codes": [
+    "394280",
+    "370090",
+    "418420",
+    "451220",
+    "140670",
+    "424960",
+    "121600",
+    "358570",
+    "005380"
+  ],
+  "us_symbols": [
+    "SMR",
+    "ACHR",
+    "CRCL"
+  ],
+  "coins": [
+    "ondo-finance"
+  ],
+  "coin_names": {
+    "ondo-finance": "ONDO"
+  },
+  "min_sector_tv_eok": 500
+}
