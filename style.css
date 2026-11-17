@@ -108,3 +108,6 @@ nav button i{font-style:normal;font-size:18px}nav button span{font-size:13px;max
 .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .tag{font-size:13px;font-weight:700;border-radius:8px;padding:3px 8px;background:#1e293b;border:1px solid var(--line)}
 .t-low{color:#fca5a5;border-color:#7f1d1d;background:#2a1215}.t-plan{color:#93c5fd}.t-my{color:#fde68a}
+
+.empty{text-align:center;padding:22px 12px;font-size:16px;line-height:1.6}
+.warnbox{border-color:#a16207;background:#2a2410}

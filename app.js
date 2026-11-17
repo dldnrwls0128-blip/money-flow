@@ -27,9 +27,8 @@ function loadCfg() {
   try { const c = JSON.parse(localStorage.getItem('mf_cfg')); if (c) return migrate(Object.assign(blankCfg(), c)); } catch {}
   return null;
 }
-function saveCfg(c) { localStorage.setItem('mf_cfg', JSON.stringify(c)); }
-function cfg() { return loadCfg() || defaultCfg(); }
-function defaultCfg() { const c = blankCfg(); if (DATA) { c.h = Object.keys(DATA.tracked || {}); c.os = (DATA.overseas || []).map(o => o.code); } return c; }
+function saveCfg(c) { c.src = c.src || 'user'; localStorage.setItem('mf_cfg', JSON.stringify(c)); }
+function cfg() { return loadCfg() || blankCfg(); }   // 새 사용자는 항상 빈 목록 (기본 종목 자동 채우기 없음)
 function parseSetup(str) {
   // h:코드,..|w:코드,..|os:SMR,..|sw:코드=매수1,매수2,매도1,매도2,손절;..|pos:코드=평단,수량;..
   const c = blankCfg();
@@ -49,8 +48,20 @@ if (location.hash.startsWith('#setup=')) {
     const add = nc.lists[0].codes; nc.lists = old.lists; nc.lists[0].codes = [...new Set([...nc.lists[0].codes, ...add])];
     nc.hName = old.hName; nc.pos = Object.assign({}, old.pos, nc.pos);
   }
-  saveCfg(nc); history.replaceState(null, '', location.pathname);
+  nc.src = 'setup'; saveCfg(nc); history.replaceState(null, '', location.pathname);
 }
+
+// 예전 버전(1.4.0 이하)은 빈 폰에 예시 종목을 채운 뒤 저장해 버릴 수 있었음.
+// 저장된 목록이 그 예시 목록과 똑같고(해시 비교), 평단·계획·설정 링크 흔적이 없으면 지울지 물어봄. 자동으로 지우지는 않음.
+let OLDDEF = false;
+(async () => {
+  try {
+    const c = loadCfg(); if (!c || c.src || Object.keys(c.sw).length || Object.keys(c.pos).length || !crypto.subtle) return;
+    const s = [...c.h].sort().join(',') + '|' + [...c.os].sort().join(',');
+    const hx = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(b => b.toString(16).padStart(2, '0')).join('');
+    if (hx === '211c38a951892619afecad16bee54ef17ea4daefa92adebe34722a86878819b0') { OLDDEF = true; if (DATA) render({ full: true }); }
+  } catch {}
+})();
 
 // ---------- 포맷 ----------
 const fmt = (n, d = 0) => n == null ? '–' : Number(n).toLocaleString('ko-KR', { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -169,7 +180,7 @@ function gauge(price, L, W, usd, mine) {
 // ---------- 카드 ----------
 function stockCard(code, opt = {}) {
   const c = cfg();
-  const r = ALL[code] || (DATA.tracked || {})[code] || (DATA.stocks_top || []).find(s => s.code === code);
+  const r = ALL[code] || (DATA.stocks_top || []).find(s => s.code === code);
   if (!r) return `<div class="card"><div class="name">${esc(code)}</div><div class="meta">시세를 찾지 못했어요 (상장폐지·코드 확인)</div>${actions(code, c)}</div>`;
   const id = 'st-' + code + (opt.k || '');
   const L = c.sw[code] ? [c.sw[code][0], c.sw[code][1], c.sw[code][4], c.sw[code][2], c.sw[code][3]] : r.l;
@@ -225,6 +236,9 @@ function overseasCard(o, c) {
     ${isCoin && !L ? '<div class="meta" style="margin-top:8px">코인은 무료 일봉(고가·저가) 데이터가 없어 가격 범위는 생략해요.</div>' : gauge(o.p, L, c.sw[o.code] ? null : o.lw, true, !!c.sw[o.code])}</div>`;
 }
 
+function osCard(o, c) {   // 해외·코인 카드 + 보유 추가/빼기 버튼
+  return overseasCard(o, c).replace(/<\/div>$/, '') + `<div class="acts"><button class="mini" data-act="os" data-code="${esc(o.code)}">${c.os.includes(o.code) ? '− 보유에서 빼기' : '+ 보유'}</button></div></div>`;
+}
 // ---------- 화면 ----------
 function viewHome() {
   const D = DATA, K = D.index.KOSPI, Kq = D.index.KOSDAQ;
@@ -246,11 +260,11 @@ function viewHome() {
 const sortS = a => a.slice().sort((x, y) => ((ALL[y] || {}).s ?? -1) - ((ALL[x] || {}).s ?? -1));
 function viewHold() {
   const c = cfg(); let h = '';
-  if (!loadCfg()) h += `<div class="card meta">아직 이 폰에 저장된 내 종목이 없어 기본 목록을 보여줘요. 찾기 탭에서 추가하거나 설정 링크로 한 번 열어 주세요.</div>`;
+  if (OLDDEF) h += `<div class="card warnbox">이 목록은 예전 버전이 자동으로 넣은 <b>기본 예시 종목</b>일 수 있어요. 직접 고른 종목이 아니라면 지워 주세요.<div class="row" style="margin-top:10px;gap:8px;justify-content:flex-start"><button class="mini" data-act="wipe">🗑 내 종목 모두 지우기</button><button class="mini" data-act="keepmine">내가 고른 거예요</button></div></div>`;
   h += `<div class="tabhead"><h2>📌 ${esc(c.hName)} (${c.h.length})</h2><button class="mini" data-act="renh">✏️ 이름</button></div>`;
-  h += c.h.length ? sortS(c.h).map(x => stockCard(x, { k: '-h' })).join('') : '<div class="card meta">찾기 탭에서 + 추가를 눌러 주세요.</div>';
+  h += c.h.length ? sortS(c.h).map(x => stockCard(x, { k: '-h' })).join('') : '<div class="card meta empty">아직 보유 종목이 없어요.<br>🔎 찾기에서 종목을 추가하세요.</div>';
   const os = (DATA.overseas || []).filter(o => c.os.includes(o.code));
-  if (os.length) h += `<h2>🌎 해외·코인</h2>` + os.map(o => overseasCard(o, c)).join('');
+  if (os.length) h += `<h2>🌎 해외·코인</h2>` + os.map(o => osCard(o, c)).join('');
   return h;
 }
 function curList(c) { const id = localStorage.getItem('mf_wtab'); return c.lists.find(l => l.id === id) || c.lists[0]; }
@@ -262,7 +276,7 @@ function viewWatch() {
     <div class="tabhead"><h2>⭐ ${esc(L.name)} (${L.codes.length})</h2>
       <span><button class="mini" data-act="rentab" data-id="${L.id}">✏️ 이름</button>${c.lists.length > 1 ? ` <button class="mini" data-act="deltab" data-id="${L.id}">🗑 삭제</button>` : ''}</span></div>
     <div class="meta hint">탭을 길게 누르면 이름을 바꿀 수 있어요</div>
-    ${L.codes.length ? sortS(L.codes).map(x => stockCard(x, { k: '-w' + L.id })).join('') : `<div class="card meta">찾기 탭이나 종목 카드에서 ☆ 관심 추가 → '${esc(L.name)}'를 고르면 여기에 들어와요.</div>`}`;
+    ${L.codes.length ? sortS(L.codes).map(x => stockCard(x, { k: '-w' + L.id })).join('') : `<div class="card meta empty">아직 '${esc(L.name)}'에 종목이 없어요.<br>🔎 찾기에서 종목을 추가하세요. (카드의 ☆ 관심 추가 → 탭 고르기)</div>`}`;
 }
 // ---------- 🎯 매수 탭: 점수 좋고 지금 매수 구간 ----------
 const PREF_RE = /(\d?우[A-C]?|우선주)$|스팩|SPAC|ETN|리츠$/;
@@ -349,12 +363,15 @@ function findResults() {
     res.sort((a, b) => a[2] - b[2] || (b[1].f?.tv || 0) - (a[1].f?.tv || 0)); res = res.slice(0, 20);
   }
   if (!q) return '';
-  return res.length ? res.map(([code]) => stockCard(code, { k: '-f' })).join('') : '<div class="card meta">찾는 종목이 없어요.</div>';
+  const c = cfg();
+  const os = (DATA.overseas || []).filter(o => o.code.toLowerCase().startsWith(q) || String(o.n).toLowerCase().startsWith(q) || String(o.full || '').toLowerCase().includes(q)).slice(0, 10)
+    .map(o => osCard(o, c)).join('');
+  return res.length || os ? res.map(([code]) => stockCard(code, { k: '-f' })).join('') + os : '<div class="card meta">찾는 종목이 없어요.</div>';
 }
 function viewFind() {
   return `<h2>🔎 종목 찾기</h2>
-    <input id="q" class="search" type="search" enterkeyhint="search" placeholder="종목명 또는 코드 (예: 현대차, 005380)" value="${esc(Q)}" autocomplete="off" autocorrect="off" spellcheck="false">
-    <div class="meta hint">코스피·코스닥 ${fmt(Object.keys(ALL).length)}개 종목 · ETF 제외 · 해외 종목은 아직 추가할 수 없어요</div>
+    <input id="q" class="search" type="search" enterkeyhint="search" placeholder="종목명 또는 코드 (예: 삼성전자, 005930, NVDA)" value="${esc(Q)}" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="meta hint">코스피·코스닥 ${fmt(Object.keys(ALL).length)}개 종목 · ETF 제외 · 해외·코인은 인기 종목 일부만 (예: NVDA, TSLA, BTC)</div>
     <div id="res">${findResults()}</div>`;
 }
 
@@ -372,7 +389,7 @@ function viewHelp() {
     <li>업종 점수: 업종(네이버 업종 분류) 시가총액 상위 5종목(우선주 제외)을 합산.</li>
     <li>${esc(DATA.flow_note)}</li></ul></div>
   <div class="card"><b>가격선 (매수·매도·손절)</b><ul class="why"><li>${esc(DATA.levels_rule)}</li>
-    <li>모두 실제 일봉 고가·저가에서 뽑아요. 아래에서 직접 넣은 계획(예: 현대차)이 있으면 그것을 먼저 써요.</li>
+    <li>모두 실제 일봉 고가·저가에서 뽑아요. 아래에서 직접 넣은 계획이 있으면 그것을 먼저 써요.</li>
     <li>가격 띠: 🔴 손절선 아래 · 🔵 매수 구간 · ⬜ 기다리는 구간 · 🟢 매도 구간. ▼가 지금 가격.</li>
     <li>사고팔 때는 반반: 매수 구간 위쪽에서 절반, 아래쪽에서 절반 · 매도 구간에 들어오면 절반, 위쪽에서 나머지.</li></ul></div>
   <div class="card"><b>목록 기준</b><ul class="why">
@@ -401,7 +418,7 @@ function planEditor() {
   return `<div class="meta" style="margin:6px 0">숫자는 원 단위. 저장하면 이 폰에만 저장되고 자동 계산보다 먼저 써요.</div>
     ${Object.entries(c.sw).map(([k, v]) => one(k, v)).join('')}
     <div class="plan-ed" data-code="">
-      <label><span class="meta">새 계획 종목 코드 (6자리)</span><input id="plan-new" inputmode="numeric" maxlength="6" placeholder="예: 005380"></label>
+      <label><span class="meta">새 계획 종목 코드 (6자리)</span><input id="plan-new" inputmode="numeric" maxlength="6" placeholder="예: 005930"></label>
       <div class="pgrid">${F.map(([n, i]) => `<label><span class="meta">${n}</span><input inputmode="numeric" data-i="${i}"></label>`).join('')}</div></div>
     <button class="btn" data-act="plansave">계획 저장</button>`;
 }
@@ -442,6 +459,9 @@ document.addEventListener('click', e => {
   if (t.dataset.act === 'renh') { askName('보유 탭 이름 바꾸기', c.hName, name => { const cc = cfg(); cc.hName = name; saveCfg(cc); render({ full: true }); }); return; }
   if (t.dataset.act === 'deltab') { const l = c.lists.find(x => x.id === t.dataset.id); if (c.lists.length < 2 || !confirm(`'${l.name}' 탭을 삭제할까요? (안의 ${l.codes.length}종목 목록도 지워져요)`)) return;
     c.lists = c.lists.filter(x => x.id !== l.id); saveCfg(c); localStorage.removeItem('mf_wtab'); render({ full: true }); return; }
+  if (t.dataset.act === 'os') { c.os = c.os.includes(code) ? c.os.filter(x => x !== code) : [...c.os, code]; saveCfg(c); render({ full: true }); return; }
+  if (t.dataset.act === 'wipe') { if (!confirm('보유·관심 종목, 평단, 계획을 이 폰에서 모두 지울까요?')) return; localStorage.removeItem('mf_cfg'); localStorage.removeItem('mf_wtab'); OLDDEF = false; render({ full: true }); return; }
+  if (t.dataset.act === 'keepmine') { c.src = 'user-ok'; saveCfg(c); OLDDEF = false; render({ full: true }); return; }
   if (t.dataset.act === 'h') {
     if (c.h.includes(code)) { if (!confirm('보유 종목에서 삭제할까요?')) return; c.h = c.h.filter(x => x !== code); delete c.pos[code]; }
     else c.h = [...c.h, code];

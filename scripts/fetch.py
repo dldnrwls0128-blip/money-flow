@@ -266,7 +266,7 @@ def main():
                                          "mkt": x["stockExchangeType"]["code"]}
     tops = {g["no"]: [x["itemCode"] for x in sorted([x for x in st if not PREF.search(x["stockName"])],
                      key=lambda x: num(x.get("marketValue")) or 0, reverse=True)[:CFG["top_per_sector"]]] for g, st in gm}
-    core = sorted(set(c for v in tops.values() for c in v) | set(CFG["extra_codes"]))
+    core = sorted(set(c for v in tops.values() for c in v))
 
     # 일별 캐시: 장 마감 후(17:50~) 하루 1회 전 종목, 그 외에는 빠진 핵심 종목만 추가
     cpath = os.path.join(ROOT, "cache", "daily.json")
@@ -342,7 +342,7 @@ def main():
               and quotes[c]["mcap"] >= CFG["min_mcap_eok"] * 1e8]
     top_codes = sorted(liquid, key=lambda c: (recs[c]["s"], recs[c]["f"]["tv"]), reverse=True)[:CFG["top_n"]]
 
-    # 해외 / 코인 (config 에 있는 것만)
+    # 해외 / 코인 (누구나 찾기에서 고를 수 있는 공용 목록)
     overseas = []
     for sym in CFG["us_symbols"]:
         y = get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=1y&interval=1d")
@@ -384,7 +384,7 @@ def main():
     data = {"updated": upd, "market_status": idx["KOSPI"]["status"], "headline": headline, "index": idx,
             "sectors_top": top_sectors, "stocks_top": [dict(recs[c], code=c) for c in top_codes],
             "sectors_all": [{k: x[k] for k in ("n", "c", "s", "pt", "f", "rise", "fall", "cnt", "lead", "picks")} for x in sectors],
-            "tracked": {c: recs.get(c) for c in CFG["extra_codes"]}, "overseas": overseas,
+            "overseas": overseas,
             "daily_made": cache.get("made"), "levels_rule": LEVEL_RULE, "min_pick_tv_eok": CFG["min_pick_tv_eok"],
             "min_top_tv_eok": CFG["min_avg_tv_eok"], "min_top_mcap_eok": CFG["min_mcap_eok"],
             "flow_note": "업종·종목 수급은 전 거래일 확정치, 지수 수급(외국인·기관)은 장중 잠정치예요.",
