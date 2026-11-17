@@ -87,16 +87,17 @@ function detailHTML(id, r, sector) {
 }
 
 // ---------- 가격 띠(게이지): 매수 구간 · 매도 구간 · 손절선 ----------
-function man(v, usd) {
+function man(v, usd, forceMan) {
   if (v == null) return '–';
   if (usd) return '$' + fmt(v, v < 10 ? 3 : 2);
-  if (v >= 100000) { const m = Math.round(v / 100) / 100; return m.toLocaleString('ko-KR', { minimumFractionDigits: Number.isInteger(m * 10) ? 1 : 2, maximumFractionDigits: 2 }) + '만'; }
+  if (v >= 100000 || forceMan) { const m = Math.round(v / 100) / 100; return m.toLocaleString('ko-KR', { minimumFractionDigits: Number.isInteger(m * 10) ? 1 : 2, maximumFractionDigits: 2 }) + '만'; }
   return fmt(v) + '원';
 }
 function range(a, b, usd) {   // a<=b
   if (a == null && b == null) return '–';
   if (a == null || b == null || a === b) return man(a ?? b, usd);
-  return `${man(Math.min(a, b), usd)}~${man(Math.max(a, b), usd)}`;
+  const fm = Math.max(a, b) >= 100000;
+  return `${man(Math.min(a, b), usd, fm)}~${man(Math.max(a, b), usd, fm)}`;
 }
 function gauge(price, L, W, usd, mine) {
   if (!L || price == null) return '<div class="meta" style="margin-top:8px">가격 범위: 일봉 데이터가 부족해 계산하지 않았어요.</div>';
