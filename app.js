@@ -398,7 +398,7 @@ async function openInfo(code) {
   const ov = (DATA.overseas || []).find(o => o.code === code);
   const r = ALL[code] || (DATA.stocks_top || []).find(s => s.code === code) || ov;
   if (!r) return;
-  const m = modal(`<div class="sheet-h"><div class="name nm">${logo(code, r.n)}<span>${esc(r.n)} <span class="meta">${esc(code)}</span></span></div><button class="mini" id="mcancel">닫기</button></div><div id="infobody" class="meta">불러오는 중…</div>`);
+  const m = modal(`<div class="sheet-h"><div class="name nm">${logo(code, r.n)}<span>${esc(r.n)} <span class="meta">${esc(code)}</span></span></div><button class="mini" id="mcancel">닫기</button></div><div id="infobody"><div class="sk skl w60"></div><div class="sk skb"></div><div class="kvs" style="margin-top:12px"><div class="sk skb"></div><div class="sk skb"></div><div class="sk skb"></div><div class="sk skb"></div></div><div class="sk skb" style="height:140px"></div></div>`);
   m.classList.add('sheet'); m.querySelector('#mcancel').onclick = closeModal;
   if (ov) { $('#infobody').innerHTML = overseasInfo(ov); return; }
   const I = await loadInfo(); const x = (I.s || {})[code], nw = (I.news || {})[code] || [];
@@ -409,7 +409,7 @@ async function openInfo(code) {
   h += `<h3>💡 돈이 왜 몰리는지</h3>${whyHTML(f, r.sec) || '<div class="meta">수급 데이터가 없어요.</div>'}`;
   if (nw.length) h += `<div class="news">${nw.map(([t, d, u, o]) => `<a href="${esc(u)}" target="_blank" rel="noopener">📰 ${esc(t)}</a><span class="meta">${esc(o)} · ${ndt(d)}</span>`).join('')}</div>
     <div class="meta">뉴스는 네이버 증권이 이 종목에 연결한 최근 기사예요. 주가가 움직인 이유라고 보장하지 않아요.</div>`;
-  if (!x) { h += `<h3>🏢 종목정보</h3><div class="card meta">정보 없음 · 종목정보는 20일 평균 거래대금 30억 이상 종목과 Top·탑픽 종목만 매일 모아요.</div>`; body.innerHTML = h; return; }
+  if (!x) { h += `<h3>🏢 종목정보</h3><div class="card meta">정보 없음 · 종목정보는 20일 평균 거래대금 30억 이상 종목과 Top·탑픽 종목만 매일 모아요.</div>`; body.innerHTML = h; tidy(body); return; }
   if (x.d) h += `<h3>🏢 회사 소개</h3><div class="desc">${esc(x.d)}</div>`;
   h += `<h3>📊 종목정보 <span class="meta">${esc(x.t)} 기준</span></h3><div class="kvs">
     ${g('시가총액', esc(x.mc))}${g('업종', esc(r.sec || '–'))}${g('PER', esc(x.per))}${g('PBR', esc(x.pbr))}
@@ -421,7 +421,7 @@ async function openInfo(code) {
   INFO_CUR = code;
   if (x.tp) h += `<div class="meta" style="margin-top:6px">증권사 목표주가 평균 ${esc(x.tp[0])}원 (${esc(x.tp[1])}) · 참고만</div>`;
   h += `<div class="meta" style="margin-top:8px">자료: 네이버 증권(지표·실적, 단위 억원 → 억/조 표시) · 52주 고저는 최근 250거래일 일봉(수정주가)으로 직접 계산 · 회사 소개 FnGuide/WISEfn · 실적은 확정치 기준</div>`;
-  body.innerHTML = h;
+  body.innerHTML = h; tidy(body);
 }
 function y52html(r, x) {   // 52주 고/저: 우리 일봉(최근 약 250거래일, 수정주가) 기준. 네이버 표기와 20% 넘게 다르면 함께 표시
   const g = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
@@ -618,7 +618,7 @@ function modal(html) {
   closeModal();
   const m = document.createElement('div'); m.id = 'modal'; m.innerHTML = `<div class="mbox">${html}</div>`;
   m.addEventListener('click', e => { if (e.target === m) closeModal(); });
-  document.body.appendChild(m); return m;
+  document.body.appendChild(m); tidy(m); return m;
 }
 function closeModal() { const m = $('#modal'); if (m) m.remove(); }
 function askName(title, val, cb) {
@@ -674,6 +674,7 @@ function viewHelp() {
   return `<div class="card"><b>앱 버전</b> v${esc(self.APP_VERSION)} · 배포 ${esc(self.APP_DATE)}
     <ul class="why">${(self.APP_CHANGES || []).map(([v, d, t]) => `<li><b>v${esc(v)}</b> (${esc(d)}) ${esc(t)}</li>`).join('')}</ul></div>
   ${shareHelpCard()}
+  <div class="card"><b>화면 테마</b><div class="theme-sel">${[['dark', '다크'], ['light', '라이트'], ['auto', '휴대폰 설정 따르기']].map(([k, n]) => `<button class="chip ${(localStorage.getItem('mf_theme') || 'dark') === k ? 'on' : ''}" data-act="theme" data-v="${k}">${n}</button>`).join('')}</div></div>
   <h2>❓ 점수와 가격선은 이렇게 정해요</h2>
   <div class="card"><b>점수 (10점 만점)</b><ul class="why">
     <li><b>수급 3점</b>: 전 거래일과 최근 3일 동안 외국인+기관 순매수가 거래량에서 차지하는 비율. 많이 살수록 높아요.</li>
@@ -723,6 +724,10 @@ function navLabels() {
   const c = cfg(); const b = document.querySelector('nav [data-tab=hold]');
   if (b) b.title = c.hName;
 }
+const EMO = /^(?:[\p{Extended_Pictographic}\u2600-\u27BF][\uFE0F\u200D\p{Extended_Pictographic}]*\s*)+/u;
+function tidy(root) {   // 제목 앞 이모지 정리 (아이콘은 CSS 막대로 통일)
+  (root || document).querySelectorAll('h2, h3').forEach(h => { const n = h.firstChild; if (n && n.nodeType === 3) n.textContent = n.textContent.replace(EMO, ''); });
+}
 function render(opts = {}) {
   if (!DATA) return;
   navLabels();
@@ -736,6 +741,7 @@ function render(opts = {}) {
   if (TAB === 'mine') TAB = 'hold';
   app.innerHTML = (TAB === 'home' ? viewHome() : TAB === 'hold' ? viewHold() : TAB === 'watch' ? viewWatch() : TAB === 'buy' ? viewBuy() : TAB === 'find' ? viewFind() : viewHelp())
     + (DATA.errors && DATA.errors.length ? `<div class="card meta">일부 데이터를 못 받았어요: ${DATA.errors.length}건</div>` : '');
+  tidy(app);
   window.scrollTo(0, y);
   const q = $('#q');
   if (q) q.addEventListener('input', () => { Q = q.value; const r = $('#res'); if (r) r.innerHTML = findResults(); });
@@ -753,6 +759,7 @@ document.addEventListener('click', e => {
   if (t.dataset.act === 'info') { openInfo(code); return; }
   if (t.dataset.act === 'cmp') { loadInfo().then(() => pickCompare(code)); return; }
   if (t.dataset.act === 'cmpgo') { openCompare(t.dataset.a, code); return; }
+  if (t.dataset.act === 'theme') { localStorage.setItem('mf_theme', t.dataset.v); applyTheme(); render({ full: true }); return; }
   if (t.dataset.act === 'install') { doInstall(); return; }
   if (t.dataset.act === 'share') { doShare(); return; }
   if (t.dataset.act === 'copylink') { copyLink(); return; }
@@ -853,8 +860,23 @@ window.addEventListener('scroll', () => { if (!TIP.hidden) { delete TIP.dataset.
 
 // ---------- 버전 표시 · 새 버전 안내 ----------
 // 예전 버전 화면(index.html)이 남아 있어도 멈추지 않도록 필요한 요소를 직접 만든다
-const NAV = [['home', '🏠', '홈'], ['buy', '🎯', '매수'], ['hold', '📌', '보유'], ['watch', '⭐', '관심'], ['find', '🔎', '찾기'], ['help', '❓', '도움말']]
-  .map(([t, i, n], k) => `<button data-tab="${t}"${k ? '' : ' class="on"'}><i>${i}</i><span>${n}</span></button>`).join('');
+const ICO = {
+  home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+  buy: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
+  hold: '<rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M8.5 7V5.5A1.5 1.5 0 0 1 10 4h4a1.5 1.5 0 0 1 1.5 1.5V7M3 12.5h18"/>',
+  watch: '<path d="m12 3.5 2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9l-5.25 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
+  find: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2.2-2.5 3.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>'
+};
+const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[k]}</svg>`;
+const NAV = [['home', '홈'], ['buy', '매수'], ['hold', '보유'], ['watch', '관심'], ['find', '찾기'], ['help', '도움말']]
+  .map(([t, n], k) => `<button data-tab="${t}"${k ? '' : ' class="on"'} aria-label="${n}">${ico(t)}<span>${n}</span></button>`).join('');
+function applyTheme() {
+  const v = localStorage.getItem('mf_theme') || 'dark'; document.documentElement.dataset.theme = v;
+  const light = v === 'light' || (v === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = light ? '#f2f4f6' : '#0b0f17';
+}
+applyTheme(); try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyTheme); } catch {}
 (function ensureShell() {
   const h1 = document.querySelector('header h1');
   if (h1 && !$('#ver')) { const s = document.createElement('span'); s.id = 'ver'; s.className = 'ver'; h1.append(' ', s); }
@@ -865,7 +887,7 @@ const NAV = [['home', '🏠', '홈'], ['buy', '🎯', '매수'], ['hold', '📌'
     n.innerHTML = NAV;
     hd.insertBefore(n, $('#newver'));
   }
-  const nv = document.querySelector('header nav'); if (nv && !nv.querySelector('[data-tab=buy]')) nv.innerHTML = NAV;
+  const nv = document.querySelector('header nav'); if (nv && !nv.querySelector('svg')) nv.innerHTML = NAV;
   const ft = document.querySelector('footer');
   if (ft && !$('#verfoot')) { const s = document.createElement('span'); s.id = 'verfoot'; ft.append(document.createElement('br'), s); }
   document.title = '돈흐름';
