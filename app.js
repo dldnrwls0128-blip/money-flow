@@ -385,7 +385,7 @@ async function applyUpdate() {
   const go = () => { if (!reloaded) { reloaded = true; location.reload(); } };
   setTimeout(go, 4000);   // 무슨 일이 있어도 4초 뒤 새로고침
   try {
-    const reg = await navigator.serviceWorker?.getRegistration();
+    const reg = await navigator.serviceWorker?.getRegistration('/money-flow/');
     if (reg) {
       navigator.serviceWorker.addEventListener('controllerchange', go, { once: true });
       await reg.update();
@@ -408,4 +408,4 @@ setInterval(checkVersion, 5 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { load(); checkVersion(); } });
 load();
 setInterval(load, 60 * 1000);
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/money-flow/sw.js', { scope: '/money-flow/', updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
