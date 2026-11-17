@@ -217,7 +217,9 @@ function viewFind() {
     <div id="res">${q ? (res.length ? res.map(([code]) => stockCard(code, { k: '-f' })).join('') : '<div class="card meta">찾는 종목이 없어요.</div>') : ''}</div>`;
 }
 function viewHelp() {
-  return `<h2>❓ 점수와 가격선은 이렇게 정해요</h2>
+  return `<div class="card"><b>앱 버전</b> v${esc(self.APP_VERSION)} · 배포 ${esc(self.APP_DATE)}
+    <ul class="why">${(self.APP_CHANGES || []).map(([v, d, t]) => `<li><b>v${esc(v)}</b> (${esc(d)}) ${esc(t)}</li>`).join('')}</ul></div>
+  <h2>❓ 점수와 가격선은 이렇게 정해요</h2>
   <div class="card"><b>점수 (10점 만점)</b><ul class="why">
     <li><b>수급 3점</b>: 전 거래일과 최근 3일 동안 외국인+기관 순매수가 거래량에서 차지하는 비율. 많이 살수록 높아요.</li>
     <li><b>거래대금 2점</b>: 오늘 거래대금이 20일 평균보다 얼마나 빠른 속도로 쌓이는지 (장중엔 지난 시간만큼 비례 계산). 평소의 2배 속도면 만점.</li>
@@ -286,7 +288,24 @@ async function load() {
     if (changed) render();
   } catch (e) { if (!DATA) app.innerHTML = '<div class="card">데이터를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.</div>'; }
 }
-$('#reload').onclick = () => { DATA = null; load(); };
+// ---------- 버전 표시 · 새 버전 안내 ----------
+$('#ver').textContent = 'v' + self.APP_VERSION;
+$('#verfoot').textContent = `앱 버전 v${self.APP_VERSION} · 배포 ${self.APP_DATE}`;
+async function checkVersion() {
+  try {
+    const t = await (await fetch('version.js?t=' + Date.now(), { cache: 'no-store' })).text();
+    const m = t.match(/APP_VERSION\s*=\s*'([^']+)'/);
+    if (m && m[1] !== self.APP_VERSION) { const b = $('#newver'); b.hidden = false; b.querySelector('b').textContent = `v${m[1]} 받기 · 눌러서 새로고침`; }
+  } catch {}
+}
+$('#newver').onclick = async () => {
+  try { const r = await navigator.serviceWorker?.getRegistration(); if (r) await r.update(); } catch {}
+  location.reload();
+};
+checkVersion();
+setInterval(checkVersion, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+$('#reload').onclick = () => { DATA = null; load(); checkVersion(); };
 load();
 setInterval(load, 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });

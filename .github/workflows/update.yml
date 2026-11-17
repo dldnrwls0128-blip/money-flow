@@ -57,7 +57,7 @@ jobs:
           git add status/last_daily.txt && git commit -m "status: daily refresh" && git push || true
       - name: site
         if: steps.fetch.outputs.ran == 'true'
-        run: mkdir -p _site && cp -r index.html app.js style.css sw.js manifest.webmanifest data.json all.json icons _site/ && touch _site/.nojekyll
+        run: mkdir -p _site && cp -r index.html version.js app.js style.css sw.js manifest.webmanifest data.json all.json icons _site/ && touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         if: steps.fetch.outputs.ran == 'true'
         with:

@@ -13,17 +13,19 @@
 <body>
 <header>
   <div class="top">
-    <h1>돈이 어디로 몰리는지</h1>
+    <h1>돈이 어디로 몰리는지 <span id="ver" class="ver"></span></h1>
     <button id="reload" aria-label="다시 불러오기">↻</button>
   </div>
   <div id="updated" class="sub">불러오는 중…</div>
   <nav><button data-tab="home" class="on">🏠 홈</button><button data-tab="mine">📌 내 종목</button><button data-tab="find">🔎 찾기</button><button data-tab="help">❓ 도움말</button></nav>
+  <div id="newver" class="newver" hidden>🆕 새 버전이 있어요 · <b>눌러서 새로고침</b></div>
 </header>
 <main id="app"></main>
 <footer>
   참고용 정보예요. 점수는 공개 시세로 자동 계산한 근사치이고, 투자 판단과 책임은 본인에게 있어요.<br>
-  데이터: 네이버 금융, Yahoo Finance, CoinGecko
+  데이터: 네이버 금융, Yahoo Finance, CoinGecko<br><span id="verfoot"></span>
 </footer>
+<script src="version.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -61,3 +61,6 @@ nav button.on{background:#e2e8f0;color:#0f172a}
 .pickbtn{width:100%;margin-top:10px;background:#0b1222;color:#93c5fd;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;font-weight:700}
 .picks{margin-top:10px}.picks .card{background:#162033}
 a{color:#93c5fd}
+
+.ver{font-size:12px;font-weight:600;color:var(--mut);vertical-align:middle;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:1px 6px}
+.newver{margin-top:8px;border-radius:12px;background:#16a34a;color:#fff;text-align:center;padding:12px;font-size:16px;cursor:pointer}
