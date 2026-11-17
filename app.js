@@ -178,6 +178,21 @@ function gauge(price, L, W, usd, mine) {
 }
 
 // ---------- 카드 ----------
+// ---------- 점수 밑 상세 펼치기/접기 (종목별로 기억) ----------
+let FOLD = {}; try { FOLD = JSON.parse(localStorage.getItem('mf_fold') || '{}') || {}; } catch {}
+const isOpen = code => !!FOLD[code];
+function setFold(code, open) { if (open) FOLD[code] = 1; else delete FOLD[code]; try { localStorage.setItem('mf_fold', JSON.stringify(FOLD)); } catch {} }
+function foldBlock(code, gaugeHTML, detail) {
+  const m = gaugeHTML.match(/<div class="state s-(\w)">(.*?)<\/div>/);
+  const st = m ? `<span class="fstate s-${m[1]}">${m[2]}</span>` : '<span class="fstate meta">점수 근거 · 가격 구간</span>';
+  const open = isOpen(code);
+  return `<div class="fold${open ? ' open' : ''}" data-code="${code}">
+    <button class="fhead" data-fold="${code}" aria-expanded="${open}">${st}<span class="ftog">${open ? '접기 ▴' : '상세 ▾'}</span></button>
+    <div class="fbody"><div class="finner">${detail}${gaugeHTML}</div></div></div>`;
+}
+function foldAllBar() {
+  return `<div class="foldall"><button class="linkbtn" data-foldall="1">모두 펼치기</button><button class="linkbtn" data-foldall="0">모두 접기</button></div>`;
+}
 function stockCard(code, opt = {}) {
   const c = cfg();
   const r = ALL[code] || (DATA.stocks_top || []).find(s => s.code === code);
@@ -194,12 +209,10 @@ function stockCard(code, opt = {}) {
   return `<div class="card">
     <div class="row"><div><div class="name nm tap" data-act="info" data-code="${code}">${logo(code, r.n)}<span>${esc(r.n)} <span class="meta">${code}</span> <span class="ibtn">ⓘ</span></span></div>
       <div class="meta">${money(r.p)} <span class="${cls(r.c)}">${pct(r.c)}</span>${r.sec ? ' · ' + esc(r.sec) : ''}</div></div>
-      <button class="sbtn c-${L_}" data-toggle="${id}"><span class="score">${r.s ?? '–'}</span><span class="badge b-${L_}">${lbl(r.s)}</span><span class="meta">왜? ▾</span></button></div>
+      <button class="sbtn c-${L_}" data-fold="${code}" aria-label="점수 상세 펼치기"><span class="score">${r.s ?? '–'}</span><span class="badge b-${L_}">${lbl(r.s)}</span></button></div>
     <div class="bar"><i style="width:${(r.s || 0) * 10}%;background:${COLOR[L_]}"></i></div>
     ${opt.tag ? `<div class="tags">${opt.tag}</div>` : ''}
-    ${whyHTML(r.f, r.sec)}
-    ${OPEN.has(id) ? detailHTML(id, r) : ''}
-    ${pl}${gauge(r.p, L, c.sw[code] ? null : r.lw, false, !!c.sw[code])}
+    ${pl}${foldBlock(code, gauge(r.p, L, c.sw[code] ? null : r.lw, false, !!c.sw[code]), whyHTML(r.f, r.sec) + detailHTML(id, r))}
     ${actions(code, c)}
   </div>`;
 }
@@ -557,6 +570,7 @@ function viewHold() {
   const c = cfg(); let h = '';
   if (OLDDEF) h += `<div class="card warnbox">이 목록은 예전 버전이 자동으로 넣은 <b>기본 예시 종목</b>일 수 있어요. 직접 고른 종목이 아니라면 지워 주세요.<div class="row" style="margin-top:10px;gap:8px;justify-content:flex-start"><button class="mini" data-act="wipe">🗑 내 종목 모두 지우기</button><button class="mini" data-act="keepmine">내가 고른 거예요</button></div></div>`;
   h += `<div class="tabhead"><h2>📌 ${esc(c.hName)} (${c.h.length})</h2><button class="mini" data-act="renh">✏️ 이름</button></div>`;
+  if (c.h.length) h += foldAllBar();
   h += c.h.length ? sortS(c.h).map(x => stockCard(x, { k: '-h' })).join('') : '<div class="card meta empty">아직 보유 종목이 없어요.<br>🔎 찾기에서 종목을 추가하세요.</div>';
   const os = (DATA.overseas || []).filter(o => c.os.includes(o.code));
   if (os.length) h += `<h2>🌎 해외·코인</h2>` + os.map(o => osCard(o, c)).join('');
@@ -571,6 +585,7 @@ function viewWatch() {
     <div class="tabhead"><h2>⭐ ${esc(L.name)} (${L.codes.length})</h2>
       <span><button class="mini" data-act="rentab" data-id="${L.id}">✏️ 이름</button>${c.lists.length > 1 ? ` <button class="mini" data-act="deltab" data-id="${L.id}">🗑 삭제</button>` : ''}</span></div>
     <div class="meta hint">탭을 길게 누르면 이름을 바꿀 수 있어요</div>
+    ${L.codes.length ? foldAllBar() : ''}
     ${L.codes.length ? sortS(L.codes).map(x => stockCard(x, { k: '-w' + L.id })).join('') : `<div class="card meta empty">아직 '${esc(L.name)}'에 종목이 없어요.<br>🔎 찾기에서 종목을 추가하세요. (카드의 ☆ 관심 추가 → 탭 고르기)</div>`}`;
 }
 // ---------- 🎯 매수 탭: 점수 좋고 지금 매수 구간 ----------
@@ -606,6 +621,7 @@ function viewBuy() {
   return `<h2>🎯 점수 좋고 지금 매수 구간인 종목</h2>
     <div class="meta hint">점수 ${th.toFixed(1)}점 이상 · 현재가가 매수 구간 안 · 20일 평균 거래대금 ${BUY_MIN_TV}억 이상(우선주·스팩 제외) + 내 보유·관심 종목 · 검사 ${fmt(n)}종목 · 내 계획이 있으면 그 구간 기준</div>
     <div class="chips">${chips}</div>
+    ${inz.length || near.length ? foldAllBar() : ''}
     <h2>🔵 지금 매수 구간 (${inz.length})</h2>
     ${inz.length ? inz.map(card).join('') : '<div class="card meta">지금 조건에 맞는 종목이 없어요. 점수 기준을 낮춰 보세요.</div>'}
     <h2>⏳ 가까워지는 중 (${near.length})</h2>
@@ -748,6 +764,13 @@ function render(opts = {}) {
 }
 
 document.addEventListener('click', e => {
+  const fa = e.target.closest('[data-foldall]');
+  if (fa) { const op = fa.dataset.foldall === '1'; document.querySelectorAll('#app .fold').forEach(f => { f.classList.toggle('open', op); setFold(f.dataset.code, op); const b = f.querySelector('.fhead'); b.setAttribute('aria-expanded', op); b.querySelector('.ftog').textContent = op ? '접기 ▴' : '상세 ▾'; }); return; }
+  const fd = e.target.closest('[data-fold]');
+  if (fd && !e.target.closest('[data-tip]')) {   // 같은 종목 카드가 여러 곳에 있으면 모두 같이
+    const code = fd.dataset.fold, op = !isOpen(code); setFold(code, op);
+    document.querySelectorAll(`.fold[data-code="${code}"]`).forEach(f => { f.classList.toggle('open', op); const b = f.querySelector('.fhead'); b.setAttribute('aria-expanded', op); b.querySelector('.ftog').textContent = op ? '접기 ▴' : '상세 ▾'; });
+    return; }
   const fb = e.target.closest('[data-fin]');
   if (fb) { FINMODE = fb.dataset.fin; if (fb.dataset.cmp && CMP) openCompare(CMP[0], CMP[1]);
     else { const x = (INFO && INFO.s || {})[INFO_CUR], box = $('#fincharts'); if (x && box) box.innerHTML = finCharts(x); } return; }

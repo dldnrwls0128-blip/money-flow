@@ -235,3 +235,17 @@ html[data-theme=light] .sk::after{background:linear-gradient(90deg,transparent,r
 .skc{padding:18px}.skl{height:14px;margin:8px 0}.skl.w40{width:40%}.skl.w60{width:60%}.skl.w80{width:80%}.skb{height:56px;margin-top:12px;border-radius:14px}
 .theme-sel{display:flex;gap:6px;margin-top:8px}
 .grid{margin-bottom:12px}.grid .card{margin-bottom:0}
+
+/* 점수 밑 상세 펼치기/접기 (v1.6.1) */
+.fold{margin-top:12px;border-top:1px solid var(--line2)}
+.fhead{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:none;border:0;color:var(--tx);padding:10px 0 2px;font:inherit;text-align:left;cursor:pointer}
+.fstate{font-size:15px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ftog{flex:0 0 auto;font-size:13px;font-weight:700;color:var(--link);background:var(--acc-soft);border-radius:999px;padding:4px 10px}
+.fbody{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s cubic-bezier(.2,.8,.2,1)}
+.fold.open .fbody{grid-template-rows:1fr}
+.finner{overflow:hidden;min-height:0;opacity:0;transition:opacity .2s ease}
+.fold.open .finner{opacity:1}
+.fold.open .fhead .fstate{display:none}.fold.open .fhead{justify-content:flex-end;padding-bottom:0}
+.finner .gauge{margin-top:8px}.finner .detail{border-top:0;margin-top:2px}
+.foldall{display:flex;gap:14px;justify-content:flex-end;margin:-4px 2px 6px}.foldall .linkbtn{margin:0;font-size:13.5px}
+@media (prefers-reduced-motion: reduce){.fbody,.finner{transition:none}}
