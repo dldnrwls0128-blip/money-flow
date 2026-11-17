@@ -267,8 +267,112 @@ function whyMoney(f, secName, isSector) {
 }
 const whyHTML = (f, sec, isSector) => { const w = whyMoney(f, sec, isSector); return w ? `<div class="whyline">${w}<span class="meta"> (${f && f.fd ? `수급 ${md(f.fd)} · ` : ''}거래 데이터 기준, 보장 아님)</span></div>` : ''; };
 
+// ---------- 실적 그래프 (SVG) ----------
+let FINMODE = 'a';
+const jos = v => v == null ? '–' : Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(Math.abs(v) >= 100000 ? 0 : 1)}조` : `${fmt(v)}억`;   // 막대 위 짧은 표기
+const pLab = (k, q) => q ? `${k.slice(2, 4)}.${Math.ceil(+k.slice(4, 6) / 3)}Q` : `${k.slice(0, 4)}`;
+function yoyTxt(v, v0) {
+  if (v == null || v0 == null) return null;
+  if (v0 <= 0 && v > 0) return ['흑전', 'up']; if (v0 > 0 && v <= 0) return ['적전', 'dn']; if (v0 <= 0 && v <= 0) return ['적지', 'dn'];
+  const p = (v / v0 - 1) * 100; return [`${p > 0 ? '+' : ''}${Math.abs(p) >= 100 ? p.toFixed(0) : p.toFixed(1)}%`, p > 0 ? 'up' : p < 0 ? 'dn' : ''];
+}
+// 한 지표(매출/영업이익/순이익)의 막대그래프. S: 시리즈, key: 'r'|'o'|'n'
+function barChart(S, key, title, q, extra) {
+  const vals = S[key], n = S.k.length, lag = q ? 4 : 1;
+  if (!vals || vals.every(v => v == null)) return `<div class="chart"><div class="ct">${title}</div><div class="meta">자료 없음</div></div>`;
+  const W = 340, H = 150, top = 22, bot = 34, ih = H - top - bot;
+  const mx = Math.max(0, ...vals.filter(v => v != null)), mn = Math.min(0, ...vals.filter(v => v != null));
+  const span = (mx - mn) || 1, y = v => top + (mx - v) / span * ih, y0 = y(0);
+  const bw = Math.min(46, W / n * 0.56), gap = W / n;
+  let s = `<line x1="0" x2="${W}" y1="${y0}" y2="${y0}" stroke="#475569" stroke-width="1"/>`;
+  vals.forEach((v, i) => {
+    const cx = gap * i + gap / 2, est = S.e[i], lab = pLab(S.k[i], q) + (est ? '(E)' : '');
+    if (v != null) {
+      const yy = Math.min(y(v), y0), hh = Math.max(1.5, Math.abs(y(v) - y0)), neg = v < 0;
+      const col = neg ? '#3b82f6' : key === 'r' ? '#22c55e' : key === 'o' ? '#eab308' : '#a78bfa';
+      const yo = i >= lag ? yoyTxt(v, vals[i - lag]) : null;
+      const mg = key === 'o' && S.r[i] ? ` · 영업이익률 ${(v / S.r[i] * 100).toFixed(1)}%` : '';
+      const tip = `${title} ${lab}: ${jo(v)}${yo ? ` (${q ? '전년 같은 분기' : '전년'} 대비 ${yo[0]})` : ''}${mg}${est ? ' · 증권사 추정치' : ''}`;
+      s += `<rect data-tip="${esc(tip)}" x="${cx - bw / 2}" y="${yy}" width="${bw}" height="${hh}" rx="3" fill="${col}" fill-opacity="${est ? .28 : .9}" ${est ? `stroke="${col}" stroke-dasharray="4 3" stroke-width="1.5"` : ''}/>`;
+      s += `<text x="${cx}" y="${neg ? yy + hh + 12 : yy - 5}" class="bv">${jos(v)}</text>`;
+      if (yo) s += `<text x="${cx}" y="${H - 4}" class="by ${yo[1]}">${yo[0]}</text>`;
+    }
+    s += `<text x="${cx}" y="${H - 18}" class="bl${est ? ' est' : ''}">${lab}</text>`;
+  });
+  return `<div class="chart"><div class="ct">${title}${extra || ''}</div><svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">${s}</svg></div>`;
+}
+function marginRow(S, q) {
+  const m = S.k.map((k, i) => S.o[i] != null && S.r[i] ? `<span class="${S.e[i] ? 'est' : ''}">${pLab(k, q)} <b>${(S.o[i] / S.r[i] * 100).toFixed(1)}%</b></span>` : '').filter(Boolean);
+  return m.length ? `<div class="mrg"><span class="meta">영업이익률</span> ${m.join('')}</div>` : '';
+}
+function finCharts(x) {
+  const S = FINMODE === 'q' ? x.fq : x.fa, q = FINMODE === 'q';
+  const tabs = `<div class="chips fin-tabs"><button class="chip ${!q ? 'on' : ''}" data-fin="a">연간</button><button class="chip ${q ? 'on' : ''}" data-fin="q">분기</button></div>`;
+  if (!S) return tabs + '<div class="meta">실적 자료가 없어요.</div>';
+  return tabs + barChart(S, 'r', '매출액', q) + barChart(S, 'o', '영업이익', q) + marginRow(S, q) + barChart(S, 'n', '순이익', q)
+    + `<div class="meta">아래 % = ${q ? '전년 같은 분기' : '전년'} 대비 · 흐린 점선 막대(E) = 증권사 추정치 · 막대를 누르면 금액이 보여요 · 음수는 파란색</div>`;
+}
+// ---------- 두 종목 실적 비교 ----------
+let CMP = null;   // [codeA, codeB]
+function compareChart(SA, SB, key, title, q, nA, nB) {
+  const keys = [...new Set([...(SA ? SA.k : []), ...(SB ? SB.k : [])])].sort();
+  const val = (S, k) => { if (!S) return null; const i = S.k.indexOf(k); return i < 0 ? null : S[key][i]; };
+  const est = (S, k) => { if (!S) return 0; const i = S.k.indexOf(k); return i < 0 ? 0 : S.e[i]; };
+  const all = keys.flatMap(k => [val(SA, k), val(SB, k)]).filter(v => v != null);
+  if (!all.length) return '';
+  const W = 340, H = 150, top = 20, bot = 22, ih = H - top - bot, mx = Math.max(0, ...all), mn = Math.min(0, ...all), span = (mx - mn) || 1;
+  const y = v => top + (mx - v) / span * ih, y0 = y(0), gap = W / keys.length, bw = Math.min(22, gap * 0.34);
+  let s = `<line x1="0" x2="${W}" y1="${y0}" y2="${y0}" stroke="#475569"/>`;
+  keys.forEach((k, i) => {
+    const cx = gap * i + gap / 2;
+    [[SA, nA, '#3b82f6', -1], [SB, nB, '#f97316', 1]].forEach(([S, nm, col, side]) => {
+      const v = val(S, k); if (v == null) return; const e = est(S, k);
+      const yy = Math.min(y(v), y0), hh = Math.max(1.5, Math.abs(y(v) - y0)), x0 = cx + side * (bw / 2 + 1) - bw / 2;
+      s += `<rect data-tip="${esc(`${nm} ${title} ${pLab(k, q)}${e ? '(E)' : ''}: ${jo(v)}`)}" x="${x0}" y="${yy}" width="${bw}" height="${hh}" rx="2" fill="${v < 0 ? '#60a5fa' : col}" fill-opacity="${e ? .3 : .92}" ${e ? `stroke="${col}" stroke-dasharray="3 2"` : ''}/>`;
+    });
+    s += `<text x="${cx}" y="${H - 6}" class="bl">${pLab(k, q)}${est(SA, k) || est(SB, k) ? '(E)' : ''}</text>`;
+  });
+  return `<div class="chart"><div class="ct">${title}</div><svg viewBox="0 0 ${W} ${H}" width="100%">${s}</svg></div>`;
+}
+async function openCompare(a, b) {
+  const I = await loadInfo(); const A_ = (I.s || {})[a], B_ = (I.s || {})[b]; const q = FINMODE === 'q';
+  const nA = (ALL[a] || {}).n || a, nB = (ALL[b] || {}).n || b;
+  const SA = A_ && (q ? A_.fq : A_.fa), SB = B_ && (q ? B_.fq : B_.fa);
+  const last = (S, k) => { if (!S) return null; for (let i = S.k.length - 1; i >= 0; i--) if (!S.e[i] && S[k][i] != null) return [S[k][i], S.k[i]]; return null; };
+  const row = (lbl, f) => `<tr><td>${lbl}</td><td>${f(A_, SA)}</td><td>${f(B_, SB)}</td></tr>`;
+  const m = modal(`<div class="sheet-h"><b>⚖️ 실적 비교</b><button class="mini" id="mcancel">닫기</button></div>
+    <div class="legend"><span><i style="background:#3b82f6"></i>${esc(nA)}</span><span><i style="background:#f97316"></i>${esc(nB)}</span></div>
+    <div class="chips fin-tabs"><button class="chip ${!q ? 'on' : ''}" data-fin="a" data-cmp="1">연간</button><button class="chip ${q ? 'on' : ''}" data-fin="q" data-cmp="1">분기</button></div>
+    ${SA || SB ? compareChart(SA, SB, 'r', '매출액', q, nA, nB) + compareChart(SA, SB, 'o', '영업이익', q, nA, nB) : '<div class="meta">두 종목 모두 실적 자료가 없어요.</div>'}
+    <table class="cmpt"><tr><th></th><th>${esc(nA)}</th><th>${esc(nB)}</th></tr>
+      ${row('시가총액', x => x ? esc(x.mc) : '–')}
+      ${row('최근 매출', (x, S) => { const l = last(S, 'r'); return l ? jo(l[0]) : '–'; })}
+      ${row('최근 영업이익', (x, S) => { const l = last(S, 'o'); return l ? jo(l[0]) : '–'; })}
+      ${row('영업이익률', (x, S) => { const r = last(S, 'r'), o = last(S, 'o'); return r && o && r[0] ? (o[0] / r[0] * 100).toFixed(1) + '%' : '–'; })}
+      ${row('PER', x => x ? esc(x.per) : '–')}${row('PBR', x => x ? esc(x.pbr) : '–')}</table>
+    <div class="meta">${q ? '분기' : '연간'} 확정치 기준 · 흐린 점선(E) = 추정치 · 자료: 네이버 증권</div>
+    <div class="mrow"><button class="mini" data-act="info" data-code="${esc(a)}">← ${esc(nA)} 정보로</button></div>`);
+  m.classList.add('sheet'); m.querySelector('#mcancel').onclick = closeModal; CMP = [a, b];
+}
+function pickCompare(a) {
+  const I = INFO || { s: {} };
+  const m = modal(`<div class="sheet-h"><b>⚖️ 비교할 종목 고르기</b><button class="mini" id="mcancel">닫기</button></div>
+    <input id="cmpq" class="search" type="search" placeholder="종목명 또는 코드" autocomplete="off"><div id="cmpres" class="plist"></div>
+    <div class="meta">종목정보가 있는 ${fmt(Object.keys(I.s).length)}개 종목 중에서 고를 수 있어요</div>`);
+  m.classList.add('sheet'); m.querySelector('#mcancel').onclick = closeModal;
+  const inp = m.querySelector('#cmpq'), res = m.querySelector('#cmpres');
+  const sec = (ALL[a] || {}).sec;
+  const draw = () => {
+    const q = inp.value.trim().toLowerCase();
+    let list = Object.keys(I.s).filter(c => c !== a && ALL[c]);
+    list = q ? list.filter(c => c.startsWith(q) || ALL[c].n.toLowerCase().includes(q)) : list.filter(c => ALL[c].sec === sec);   // 처음엔 같은 업종
+    list.sort((x, y) => (ALL[y].f?.tv || 0) - (ALL[x].f?.tv || 0));
+    res.innerHTML = (q ? '' : `<div class="meta">같은 업종 (${esc(sec || '–')})</div>`) + (list.slice(0, 12).map(c => `<button class="pickrow" data-act="cmpgo" data-a="${esc(a)}" data-code="${c}">${logo(c, ALL[c].n)}<span>${esc(ALL[c].n)} <span class="meta">${c}</span></span></button>`).join('') || '<div class="meta">없어요</div>');
+  };
+  inp.addEventListener('input', draw); draw();
+}
 // ---------- 종목정보 (info.json, 처음 열 때 한 번 받음) ----------
-let INFO = null, INFO_AT = 0;
+let INFO = null, INFO_AT = 0, INFO_CUR = null;
 async function loadInfo() {
   if (INFO && Date.now() - INFO_AT < 30 * 60e3) return INFO;
   try { const j = await (await fetch('info.json?t=' + Date.now(), { cache: 'no-store' })).json(); INFO = j; INFO_AT = Date.now(); } catch { INFO = INFO || { s: {}, news: {} }; }
@@ -311,7 +415,10 @@ async function openInfo(code) {
     ${g('시가총액', esc(x.mc))}${g('업종', esc(r.sec || '–'))}${g('PER', esc(x.per))}${g('PBR', esc(x.pbr))}
     ${g('ROE', x.roe != null ? x.roe + '%' + (x.roep ? ` <span class="meta">(${x.roep.slice(0, 4)})</span>` : '') : '–')}${g('배당수익률', esc(x.dy))}
     ${y52html(r, x)}${g('외국인 보유율', esc(x.fr))}${g('추정 PER', esc(x.cper))}</div>`;
-  h += finTable(x.a, false) + finTable(x.q, true);
+  h += `<h3>📈 실적 그래프</h3><div id="fincharts">${finCharts(x)}</div>
+    <button class="bigbtn alt" style="width:100%;margin-top:8px" data-act="cmp" data-code="${esc(code)}">⚖️ 다른 종목과 실적 비교</button>`;
+  h += `<details class="fold"><summary>숫자로 보기 (최근 연간·분기, 전년 대비)</summary>${finTable(x.a, false) + finTable(x.q, true)}</details>`;
+  INFO_CUR = code;
   if (x.tp) h += `<div class="meta" style="margin-top:6px">증권사 목표주가 평균 ${esc(x.tp[0])}원 (${esc(x.tp[1])}) · 참고만</div>`;
   h += `<div class="meta" style="margin-top:8px">자료: 네이버 증권(지표·실적, 단위 억원 → 억/조 표시) · 52주 고저는 최근 250거래일 일봉(수정주가)으로 직접 계산 · 회사 소개 FnGuide/WISEfn · 실적은 확정치 기준</div>`;
   body.innerHTML = h;
@@ -635,12 +742,17 @@ function render(opts = {}) {
 }
 
 document.addEventListener('click', e => {
+  const fb = e.target.closest('[data-fin]');
+  if (fb) { FINMODE = fb.dataset.fin; if (fb.dataset.cmp && CMP) openCompare(CMP[0], CMP[1]);
+    else { const x = (INFO && INFO.s || {})[INFO_CUR], box = $('#fincharts'); if (x && box) box.innerHTML = finCharts(x); } return; }
   const t = e.target.closest('[data-toggle],[data-act],[data-tab]'); if (!t) return;
   if (t.dataset.tab) { e.preventDefault(); TAB = t.dataset.tab; window.scrollTo(0, 0); render({ full: true }); return; }
   if (t.dataset.toggle) { const id = t.dataset.toggle; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); render({ full: true }); return; }
   const c = cfg(), code = t.dataset.code;
   if (t.dataset.act === 'pick') { pickLists(code); return; }
   if (t.dataset.act === 'info') { openInfo(code); return; }
+  if (t.dataset.act === 'cmp') { loadInfo().then(() => pickCompare(code)); return; }
+  if (t.dataset.act === 'cmpgo') { openCompare(t.dataset.a, code); return; }
   if (t.dataset.act === 'install') { doInstall(); return; }
   if (t.dataset.act === 'share') { doShare(); return; }
   if (t.dataset.act === 'copylink') { copyLink(); return; }

@@ -50,16 +50,22 @@ for c in liquid:   # 🎯매수 후보(6.0점↑, 매수 구간 또는 3% 이내
     r = A[c]; L = r.get("l")
     if r["s"] >= 6.0 and L and r.get("p") and r["p"] <= L[0] * 1.03 and (L[1] is None or r["p"] >= L[1]): featured.add(c)
 universe = liquid | featured
+if os.environ.get("INFO_ONLY"): universe = featured = set(os.environ["INFO_ONLY"].split(","))   # 로컬 시험용
 print("info 대상", len(universe), "주목", len(featured), flush=True)
 
 def fin_rows(fi):
     if not fi: return None
     fi = fi.get("financeInfo") or {}
-    keys = [t["key"] for t in fi.get("trTitleList", []) if t.get("isConsensus") == "N"]
+    tl = fi.get("trTitleList", [])
+    keys = [t["key"] for t in tl if t.get("isConsensus") == "N"]
     rows = {r["title"]: r["columns"] for r in fi.get("rowList", [])}
     def v(t, k):
         x = (rows.get(t) or {}).get(k) or {}; return num(x.get("value"))
-    return keys, v
+    # 그래프용 전체 기간 (추정치 포함, e=1)
+    allk = [t["key"] for t in tl]
+    ser = {"k": allk, "e": [1 if t.get("isConsensus") == "Y" else 0 for t in tl],
+           "r": [v("매출액", k) for k in allk], "o": [v("영업이익", k) for k in allk], "n": [v("당기순이익", k) for k in allk]}
+    return keys, v, ser
 
 def fundamentals(code):
     it = get(f"https://m.stock.naver.com/api/stock/{code}/integration")
@@ -73,13 +79,15 @@ def fundamentals(code):
     for kind, lag in (("annual", 1), ("quarter", 4)):   # 연간은 전년, 분기는 4분기 전과 비교(YoY)
         fr = fin_rows(get(f"https://m.stock.naver.com/api/stock/{code}/finance/{kind}"))
         if not fr: continue
-        keys, v = fr
+        keys, v, ser = fr
+        if any(x is not None for x in ser["r"] + ser["o"]): rec["fa" if kind == "annual" else "fq"] = ser
         if not keys: continue
         k = keys[-1]; k0 = keys[-1 - lag] if len(keys) > lag else None
         x = {"p": k, "rev": v("매출액", k), "op": v("영업이익", k), "ni": v("당기순이익", k)}
         if k0: x.update(p0=k0, rev0=v("매출액", k0), op0=v("영업이익", k0), ni0=v("당기순이익", k0))
         if kind == "annual": rec["roe"] = v("ROE", k); rec["roep"] = k
         rec["a" if kind == "annual" else "q"] = x
+    rec.setdefault("fa", None)
     return rec
 
 def describe(code):
@@ -107,7 +115,7 @@ full = force or (hm >= 1800 and cache["day"] != today) or not cache["s"]
 S = cache["s"]
 tday = now.strftime("%Y-%m-%d")
 pri = lambda c: (c not in featured, c)   # 주목 종목 먼저
-todo = sorted((c for c in universe if S.get(c, {}).get("t") != tday), key=pri) if full else sorted((c for c in universe if c not in S), key=pri)[:200]
+todo = sorted((c for c in universe if S.get(c, {}).get("t") != tday), key=pri) if full else sorted((c for c in universe if c not in S or "fa" not in S[c]), key=pri)
 changed = False
 if todo:
     t0 = time.time()
