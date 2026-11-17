@@ -109,9 +109,9 @@ def levels(c, sr, base_pct=None):
         if st:
             lv.update(stop=st[0] * 0.995, stop_why=st[1] + " 바로 밑")
         else:
-            lv.update(stop=b2[0] * 0.96, stop_why="더 낮은 일봉 저점이 없어 2차 매수가 −4%")
+            lv.update(stop=b2[0] * 0.96, stop_why="더 낮은 일봉 저점이 없어 매수 구간 하단 −4%")
     else:
-        lv.update(stop=b1[0] * 0.96, stop_why="더 낮은 일봉 저점이 없어 1차 매수가 −4%")
+        lv.update(stop=b1[0] * 0.96, stop_why="더 낮은 일봉 저점이 없어 매수가 −4%")
     s1 = min((x for x in R if x[0] >= max(b1[0] * 1.04, c)), key=lambda x: x[0], default=None)
     if s1:
         lv.update(sell1=s1[0], sell1_why=s1[1])
@@ -195,9 +195,10 @@ def lv_compact(lv):
     if not lv: return None
     return [lv.get(k) for k in ("buy1", "buy2", "stop", "sell1", "sell2")], [lv.get(k + "_why") for k in ("buy1", "buy2", "stop", "sell1", "sell2")]
 
-LEVEL_RULE = ("1차 매수=최근 10일 저점(이미 깨졌으면 그 아래 가장 가까운 일봉 저점), 2차 매수=그보다 3% 이상 낮은 일봉 저점, "
-              "손절=2차 매수보다 3.5% 이상 낮은 실제 일봉 저점 바로 밑, 1차 목표=1차 매수보다 4% 이상·현재가 이상인 가장 가까운 고점, "
-              "2차 목표=그보다 4% 이상 높은 다음 고점(60일·52주 고점 포함). 수익률은 1차 매수가 기준.")
+LEVEL_RULE = ("매수 구간: 위쪽=최근 10일 저점(이미 깨졌으면 그 아래 가장 가까운 일봉 저점), 아래쪽=그보다 3% 이상 낮은 일봉 저점. "
+              "손절선=매수 구간 아래쪽보다 3.5% 이상 낮은 실제 일봉 저점 바로 밑. "
+              "매도 구간: 아래쪽=매수 구간 위쪽보다 4% 이상·현재가 이상인 가장 가까운 고점, 위쪽=그보다 4% 이상 높은 다음 고점(60일·52주 고점 포함). "
+              "수익률은 매수 구간 위쪽 가격 기준.")
 
 def all_quotes():
     out = {}

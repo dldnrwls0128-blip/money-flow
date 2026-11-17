@@ -76,42 +76,57 @@ function detailHTML(id, r, sector) {
   return `<div class="detail">${rows}<div class="meta">기준: 수급 ${r.f && r.f.fd ? md(r.f.fd) + ' 확정치' : '–'} · 시세 ${kst(DATA.updated)} · <a href="#" data-tab="help">점수 규칙 보기</a></div></div>`;
 }
 
-// ---------- 가격 띠(게이지) ----------
+// ---------- 가격 띠(게이지): 매수 구간 · 매도 구간 · 손절선 ----------
+function man(v, usd) {
+  if (v == null) return '–';
+  if (usd) return '$' + fmt(v, v < 10 ? 3 : 2);
+  if (v >= 100000) return (Math.round(v / 100) / 100).toLocaleString('ko-KR', { maximumFractionDigits: 2 }) + '만';
+  return fmt(v) + '원';
+}
+function range(a, b, usd) {   // a<=b
+  if (a == null && b == null) return '–';
+  if (a == null || b == null || a === b) return man(a ?? b, usd);
+  return `${man(Math.min(a, b), usd)}~${man(Math.max(a, b), usd)}`;
+}
 function gauge(price, L, W, usd, mine) {
   if (!L || price == null) return '<div class="meta" style="margin-top:8px">가격 범위: 일봉 데이터가 부족해 계산하지 않았어요.</div>';
-  let [b1, b2, st, s1, s2] = L;
-  const pts = [st, b2, b1, s1, s2, price].filter(v => v != null);
+  const [bt, bb, st, sb, stp] = L;   // 매수 위쪽, 매수 아래쪽, 손절선, 매도 아래쪽, 매도 위쪽
+  const pts = [st, bb, bt, sb, stp, price].filter(v => v != null);
   const lo = Math.min(...pts) * 0.97, hi = Math.max(...pts) * 1.03;
-  const x = v => ((v - lo) / (hi - lo) * 100).toFixed(1);
-  const seg = (a, b, c) => a == null || b == null || b <= a ? '' : `<i style="left:${x(a)}%;width:${x(b) - x(a)}%;background:${c}"></i>`;
-  const top2 = s2 ?? s1;
-  const bars = seg(lo, st, '#ef4444') + (b2 != null ? seg(st, b2, '#475569') + seg(b2, b1, '#3b82f6') : seg(st, b1, '#3b82f6')) + seg(b1, s1 ?? hi, '#64748b') + seg(s1, s2 ?? hi, '#22c55e') + (s2 ? seg(s2, hi, '#15803d') : '');
-  const tl = [[st, '손절'], [b2, '2차매수'], [b1, '1차매수'], [s1, '목표1'], [s2, '목표2']].filter(t => t[0] != null);
-  const ticks = tl.map(([v]) => `<s style="left:${x(v)}%"></s>`).join('');
-  const tlab = tl.map(([v, n], i) => `<em style="left:${x(v)}%;top:${i % 2 ? 16 : 0}px">${n}</em>`).join('');
+  const x = v => ((v - lo) / (hi - lo) * 100);
+  const seg = (a, b, c) => a == null || b == null || b <= a ? '' : `<i style="left:${x(a).toFixed(1)}%;width:${(x(b) - x(a)).toFixed(1)}%;background:${c}"></i>`;
+  const buyLow = bb ?? st, sellHi = stp ?? hi;
+  const bars = seg(lo, st, '#ef4444') + (bb != null ? seg(st, bb, '#475569') : '') + seg(bb ?? st, bt, '#3b82f6') + seg(bt, sb ?? hi, '#64748b') + seg(sb, sellHi, '#22c55e');
+  const mid = (a, b) => ((x(a) + x(b)) / 2).toFixed(1);
+  const zl = [[mid(lo, st), '손절', 'r'], [mid(buyLow, bt), '매수', 'b']].concat(sb != null ? [[mid(sb, sellHi), '매도', 'g']] : [])
+    .map((z, i, a) => { if (i) z[0] = Math.max(+z[0], +a[i - 1][0] + 13); z[0] = Math.min(Math.max(+z[0], 6), 94); return z; })
+    .map(([p, n, c]) => `<em class="z-${c}" style="left:${p}%">${n}</em>`).join('');
   let state, sc;
-  if (price <= st) { state = '🚨 손절 주의 · 손절가 아래 (종가로 확인)'; sc = 'r'; }
-  else if (b2 != null && price < b2) { state = '⚠️ 2차 매수가 아래 · 손절가 가까움'; sc = 'r'; }
-  else if (price <= b1 * 1.01) { state = '🔵 매수 구간'; sc = 'b'; }
-  else if (s1 == null && !mine) { state = '⏳ 매수가 위 · 위쪽 저항 없음(신고가권)'; sc = 'n'; }
-  else if (s1 == null || price < s1 * (mine ? 1 : 0.99)) { state = '⏳ 매수가 위 · 기다리기'; sc = 'n'; }
-  else if (!mine) { state = '🟢 1차 목표 도달 · 절반 팔기 구간'; sc = 'g'; }
-  else if (s2 == null || price < s2) { state = '🟢 1차 매도 도달 · 절반 팔기'; sc = 'g'; }
-  else { state = '🟢 2차 매도 도달 · 나머지 팔기'; sc = 'g'; }
-  const from = v => { const d = (v / price - 1) * 100; return `${d > 0 ? '+' : ''}${d.toFixed(1)}%`; };
-  const vsb1 = v => { const d = (v / b1 - 1) * 100; return `1차 매수 대비 ${d > 0 ? '+' : ''}${d.toFixed(1)}%`; };
-  const rows = [
-    ['🟢', '2차 매도 (나머지)', s2, W && W[4], true], ['🟢', '1차 매도 (절반)', s1, W && W[3], true],
-    ['🔵', '1차 매수 (절반)', b1, W && W[0]], ['🔵', '2차 매수 (절반)', b2, W && W[1]], ['🔴', '손절 (종가 기준)', st, W && W[2], true]]
-    .filter(r => r[2] != null).map(([ic, k, v, why, rel]) => `<div class="lv"><div class="row"><span>${ic} ${k}</span><b>${money(v, usd)}</b></div>
-      <div class="meta">지금부터 ${from(v)}${rel && v !== b1 ? ' · ' + vsb1(v) : ''}${why ? ' · ' + esc(why) : ''}</div></div>`).join('');
+  if (price <= st) { state = '🚨 손절 주의 · 손절선 아래 (종가로 확인)'; sc = 'r'; }
+  else if (bb != null && price < bb) { state = '⚠️ 매수 구간 아래 · 손절선 가까움'; sc = 'r'; }
+  else if (price <= bt * 1.01) { state = '🔵 매수 구간'; sc = 'b'; }
+  else if (sb == null) { state = '⏳ 매수 구간 위 · 위쪽 저항 없음(신고가권)'; sc = 'n'; }
+  else if (price < sb * (mine ? 1 : 0.99)) { state = '⏳ 매수 구간 위 · 기다리기'; sc = 'n'; }
+  else if (stp == null || price < stp) { state = '🟢 매도 구간 · 절반 팔기'; sc = 'g'; }
+  else { state = '🟢 매도 구간 위쪽 도달 · 나머지 팔기'; sc = 'g'; }
+  const d = v => { const p = (v / price - 1) * 100; return `${p > 0 ? '+' : ''}${p.toFixed(1)}%`; };
+  const dr = (a, b) => a == null || b == null || a === b ? d(a ?? b) : `${d(Math.min(a, b))} ~ ${d(Math.max(a, b))}`;
+  const vb = v => { const p = (v / bt - 1) * 100; return `${p > 0 ? '+' : ''}${p.toFixed(1)}%`; };
+  const why = (a, b) => [a, b].filter(Boolean).map(esc).join(' / ');
+  const rows = [];
+  if (sb != null) rows.push(`<div class="lv"><div class="row"><span>🟢 매도 구간</span><b>${range(sb, stp, usd)}</b></div>
+    <div class="meta">지금부터 ${dr(sb, stp)} · 매수가 대비 ${stp != null ? vb(sb) + ' ~ ' + vb(stp) : vb(sb)} · 들어오면 절반, 위쪽에서 나머지${W ? ' · 근거: ' + why(W[3], W[4]) : ''}</div></div>`);
+  rows.push(`<div class="lv"><div class="row"><span>🔵 매수 구간</span><b>${range(bb, bt, usd)}</b></div>
+    <div class="meta">지금부터 ${dr(bb, bt)} · 위쪽에서 절반, 아래쪽에서 절반${W ? ' · 근거: ' + why(W[0], W[1]) : ''}</div></div>`);
+  rows.push(`<div class="lv"><div class="row"><span>🔴 손절</span><b>${man(st, usd)} 아래</b></div>
+    <div class="meta">종가 기준 · 지금부터 ${d(st)} · 매수가 대비 ${vb(st)}${W && W[2] ? ' · 근거: ' + esc(W[2]) : ''}</div></div>`);
+  const summary = `<div class="zsum"><span class="zb">매수 ${range(bb, bt, usd)}</span>${sb != null ? `<span class="zg">매도 ${range(sb, stp, usd)}</span>` : ''}<span class="zr">손절 ${man(st, usd)} 아래</span></div>`;
   return `<div class="gauge">
-    <div class="state s-${sc}">${state}</div>
-    <div class="gwrap"><div class="mk" style="left:${x(price)}%"><span>${money(price, usd)}</span>▼</div>
-      <div class="gbar">${bars}${ticks}</div>
-      <div class="glab">${tlab}</div></div>
-    <details ${OPEN.has('lv') ? 'open' : ''}><summary>가격선 자세히 ${mine ? '(내가 정한 계획)' : '(일봉 지지·저항 자동 계산)'}</summary>${rows}
-    <div class="meta">${mine ? '설정에서 직접 넣은 계획이 자동값보다 우선해요.' : esc(DATA.levels_rule || '')}</div></details>
+    <div class="state s-${sc}">${state}</div>${summary}
+    <div class="gwrap"><div class="mk" style="left:${x(price).toFixed(1)}%"><span>${man(price, usd)}</span>▼</div>
+      <div class="gbar">${bars}</div><div class="glab">${zl}</div></div>
+    <details><summary>구간 자세히 ${mine ? '(내가 정한 계획)' : '(일봉 지지·저항 자동 계산)'}</summary>${rows.join('')}
+    <div class="meta">${mine ? '내가 정한 계획이 자동값보다 우선해요.' : esc(DATA.levels_rule || '')}</div></details>
   </div>`;
 }
 
@@ -201,7 +216,7 @@ function viewMine() {
   h += `<h2>⭐ 관심 종목 (${c.w.length})</h2>` + (c.w.length ? sortS(c.w).map(x => stockCard(x, { k: '-w' })).join('') : '<div class="card meta">찾기 탭에서 ☆ 관심 추가를 눌러 주세요.</div>');
   return h;
 }
-function viewFind() {
+function findResults() {
   const q = Q.trim().toLowerCase();
   let res = [];
   if (q) {
@@ -211,11 +226,16 @@ function viewFind() {
     }
     res.sort((a, b) => a[2] - b[2] || (b[1].f?.tv || 0) - (a[1].f?.tv || 0)); res = res.slice(0, 20);
   }
-  return `<h2>🔎 종목 찾기</h2>
-    <input id="q" type="search" placeholder="종목명 또는 6자리 코드 (예: 현대차, 005380)" value="${esc(Q)}" autocomplete="off">
-    <div class="meta hint">코스피·코스닥 ${fmt(Object.keys(ALL).length)}개 종목 · ETF 제외 · 해외 종목은 아직 추가할 수 없어요</div>
-    <div id="res">${q ? (res.length ? res.map(([code]) => stockCard(code, { k: '-f' })).join('') : '<div class="card meta">찾는 종목이 없어요.</div>') : ''}</div>`;
+  if (!q) return '';
+  return res.length ? res.map(([code]) => stockCard(code, { k: '-f' })).join('') : '<div class="card meta">찾는 종목이 없어요.</div>';
 }
+function viewFind() {
+  return `<h2>🔎 종목 찾기</h2>
+    <input id="q" class="search" type="search" enterkeyhint="search" placeholder="종목명 또는 코드 (예: 현대차, 005380)" value="${esc(Q)}" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="meta hint">코스피·코스닥 ${fmt(Object.keys(ALL).length)}개 종목 · ETF 제외 · 해외 종목은 아직 추가할 수 없어요</div>
+    <div id="res">${findResults()}</div>`;
+}
+
 function viewHelp() {
   return `<div class="card"><b>앱 버전</b> v${esc(self.APP_VERSION)} · 배포 ${esc(self.APP_DATE)}
     <ul class="why">${(self.APP_CHANGES || []).map(([v, d, t]) => `<li><b>v${esc(v)}</b> (${esc(d)}) ${esc(t)}</li>`).join('')}</ul></div>
@@ -230,8 +250,9 @@ function viewHelp() {
     <li>업종 점수: 업종(네이버 업종 분류) 시가총액 상위 5종목(우선주 제외)을 합산.</li>
     <li>${esc(DATA.flow_note)}</li></ul></div>
   <div class="card"><b>가격선 (매수·매도·손절)</b><ul class="why"><li>${esc(DATA.levels_rule)}</li>
-    <li>모두 실제 일봉 고가·저가에서 뽑아요. 설정에서 직접 넣은 스윙 계획(예: 현대차)이 있으면 그것을 먼저 써요.</li>
-    <li>가격 띠: 🔴 손절 아래 · ⬛ 손절~2차 매수 사이 · 🔵 매수 구간(2차~1차) · ⬜ 기다리는 구간 · 🟢 매도 구간(1차~2차 목표). ▼가 지금 가격.</li></ul></div>
+    <li>모두 실제 일봉 고가·저가에서 뽑아요. 아래에서 직접 넣은 계획(예: 현대차)이 있으면 그것을 먼저 써요.</li>
+    <li>가격 띠: 🔴 손절선 아래 · 🔵 매수 구간 · ⬜ 기다리는 구간 · 🟢 매도 구간. ▼가 지금 가격.</li>
+    <li>사고팔 때는 반반: 매수 구간 위쪽에서 절반, 아래쪽에서 절반 · 매도 구간에 들어오면 절반, 위쪽에서 나머지.</li></ul></div>
   <div class="card"><b>목록 기준</b><ul class="why">
     <li>종목 Top 5: 시총 ${fmt(DATA.min_top_mcap_eok)}억 이상, 20일 평균 거래대금 ${DATA.min_top_tv_eok}억 이상</li>
     <li>업종 탑픽 3: 업종 안 20일 평균 거래대금 ${DATA.min_pick_tv_eok}억 이상, 우선주 제외, 점수 순</li>
@@ -239,74 +260,152 @@ function viewHelp() {
   <div class="card"><b>갱신</b><ul class="why"><li>평일 08:50~15:50 약 10분마다 시세·점수 갱신, 18:10쯤 전 종목 일별 데이터(수급·일봉) 갱신. GitHub 일정상 몇 분 늦을 수 있어요.</li>
     <li>앱은 1분마다 새 데이터를 확인해요. 초 단위 실시간 시세는 아니에요.</li></ul></div>
   <div class="card"><b>내 종목 저장</b><ul class="why"><li>관심·보유 종목, 평단·수량, 스윙 계획은 이 폰에만 저장되고 어디에도 올라가지 않아요. 앱 데이터를 지우면 사라져요.</li></ul>
-    <details><summary>⚙️ 스윙 계획 직접 넣기</summary>
-    <div class="meta">형식: 코드=사기1,사기2,팔기1,팔기2,손절 (여러 개는 ;)</div>
-    <input id="cf-sw" value="${esc(Object.entries(cfg().sw).map(([k, v]) => k + '=' + v.join(',')).join(';'))}">
-    <button class="btn" id="cf-save">저장</button></details></div>`;
+    <details ${OPEN.has('plan') ? 'open' : ''}><summary data-toggle-keep="plan">⚙️ 내 매매 계획 직접 넣기</summary>${planEditor()}</details></div>`;
 }
 
-function render() {
-  if (!DATA) return;
+let FLASH = '';
+function setUpdated() {
+  const el = $('#updated'); if (!el || !DATA) return;
   const open = DATA.market_status === 'OPEN';
-  $('#updated').innerHTML = `마지막 갱신 <b>${kst(DATA.updated)}</b> (KST) · ${open ? '🟢 장중 약 10분마다 갱신' : '⚪ 장 마감/휴장'}`;
+  el.innerHTML = `마지막 갱신 <b>${kst(DATA.updated)}</b> (KST) · ${open ? '🟢 장중 약 10분마다 갱신' : '⚪ 장 마감/휴장'}${FLASH ? ` <span class="flash">${FLASH}</span>` : ''}`;
+}
+function planEditor() {
+  const c = cfg();
+  const F = [['매수 구간 위쪽', 0], ['매수 구간 아래쪽', 1], ['매도 구간 아래쪽', 2], ['매도 구간 위쪽', 3], ['손절선', 4]];
+  const one = (code, v) => `<div class="plan-ed" data-code="${esc(code)}">
+    <div class="row"><b>${esc((ALL[code] || {}).n || code)} <span class="meta">${esc(code)}</span></b><button class="mini" data-act="plandel" data-code="${esc(code)}">삭제</button></div>
+    <div class="pgrid">${F.map(([n, i]) => `<label><span class="meta">${n}</span><input inputmode="numeric" data-i="${i}" value="${v[i] ?? ''}"></label>`).join('')}</div></div>`;
+  return `<div class="meta" style="margin:6px 0">숫자는 원 단위. 저장하면 이 폰에만 저장되고 자동 계산보다 먼저 써요.</div>
+    ${Object.entries(c.sw).map(([k, v]) => one(k, v)).join('')}
+    <div class="plan-ed" data-code="">
+      <label><span class="meta">새 계획 종목 코드 (6자리)</span><input id="plan-new" inputmode="numeric" maxlength="6" placeholder="예: 005380"></label>
+      <div class="pgrid">${F.map(([n, i]) => `<label><span class="meta">${n}</span><input inputmode="numeric" data-i="${i}"></label>`).join('')}</div></div>
+    <button class="btn" data-act="plansave">계획 저장</button>`;
+}
+
+function render(opts = {}) {
+  if (!DATA) return;
+  const ae = document.activeElement;
+  if (TAB === 'find' && ae && ae.id === 'q' && !opts.full) {   // 입력 중에는 검색창을 다시 그리지 않음
+    const r = $('#res'); if (r) r.innerHTML = findResults(); setUpdated(); return;
+  }
+  setUpdated();
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === TAB));
   const y = window.scrollY;
   app.innerHTML = (TAB === 'home' ? viewHome() : TAB === 'mine' ? viewMine() : TAB === 'find' ? viewFind() : viewHelp())
     + (DATA.errors && DATA.errors.length ? `<div class="card meta">일부 데이터를 못 받았어요: ${DATA.errors.length}건</div>` : '');
   window.scrollTo(0, y);
   const q = $('#q');
-  if (q) { q.oninput = () => { Q = q.value; const p = q.selectionStart; render(); const n = $('#q'); n.focus(); n.setSelectionRange(p, p); }; }
-  const sv = $('#cf-save');
-  if (sv) sv.onclick = () => { const c = cfg(); c.sw = parseSetup('sw:' + $('#cf-sw').value.replace(/\s/g, '')).sw; saveCfg(c); alert('저장했어요'); render(); };
+  if (q) q.addEventListener('input', () => { Q = q.value; const r = $('#res'); if (r) r.innerHTML = findResults(); });
 }
 
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-toggle],[data-act],[data-tab]'); if (!t) return;
-  if (t.dataset.tab) { e.preventDefault(); TAB = t.dataset.tab; window.scrollTo(0, 0); render(); return; }
-  if (t.dataset.toggle) { const id = t.dataset.toggle; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); render(); return; }
+  if (t.dataset.tab) { e.preventDefault(); TAB = t.dataset.tab; window.scrollTo(0, 0); render({ full: true }); return; }
+  if (t.dataset.toggle) { const id = t.dataset.toggle; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); render({ full: true }); return; }
   const c = cfg(), code = t.dataset.code;
   if (t.dataset.act === 'w') c.w = c.w.includes(code) ? c.w.filter(x => x !== code) : [...c.w, code];
   if (t.dataset.act === 'h') {
     if (c.h.includes(code)) { if (!confirm('보유 종목에서 삭제할까요?')) return; c.h = c.h.filter(x => x !== code); delete c.pos[code]; }
     else c.h = [...c.h, code];
   }
+  if (t.dataset.act === 'plandel') { if (!confirm('이 계획을 삭제할까요?')) return; delete c.sw[code]; saveCfg(c); render({ full: true }); return; }
+  if (t.dataset.act === 'plansave') {
+    let bad = '';
+    document.querySelectorAll('.plan-ed').forEach(box => {
+      const code0 = box.dataset.code || ($('#plan-new')?.value || '').trim();
+      const v = [...box.querySelectorAll('input[data-i]')].map(i => Number(i.value.replace(/[,\s원]/g, '')) || null);
+      if (!code0 || v.every(x => x == null)) return;
+      if (!/^\d{6}$|^[A-Z.]+$/.test(code0)) { bad = '종목 코드를 확인해 주세요'; return; }
+      const [bt, bb, sb, stp, st] = v;
+      if (!bt || !st) { bad = '매수 구간 위쪽과 손절선은 꼭 넣어 주세요'; return; }
+      c.sw[code0] = [bt, bb ?? bt, sb, stp ?? sb, st];
+    });
+    if (bad) { alert(bad); return; }
+    saveCfg(c); OPEN.add('plan'); alert('저장했어요'); render({ full: true }); return;
+  }
   if (t.dataset.act === 'pos') {
     const a = Number($('#pa-' + code).value.replace(/,/g, '')), q = Number($('#pq-' + code).value.replace(/,/g, ''));
     if (a > 0) c.pos[code] = { a, q: q > 0 ? q : 0 }; else delete c.pos[code];
     OPEN.delete('pos-' + code);
   }
-  saveCfg(c); render();
+  saveCfg(c); render({ full: true });
 });
 
-async function load() {
+async function load(manual) {
   try {
     const r = await fetch('data.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json(); const changed = !DATA || d.updated !== DATA.updated; DATA = d;
     if (changed || !ALL_UPD) {
       try { const a = await (await fetch('all.json?t=' + Date.now(), { cache: 'no-store' })).json(); ALL = a.s || {}; ALL_UPD = a.updated; } catch {}
     }
-    if (changed) render();
-  } catch (e) { if (!DATA) app.innerHTML = '<div class="card">데이터를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.</div>'; }
+    if (manual) {
+      const now = new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false });
+      FLASH = changed ? `✅ 새 데이터 받음 ${now}` : `✅ 확인함 ${now} · 최신이에요`;
+      setTimeout(() => { FLASH = ''; setUpdated(); }, 6000);
+    }
+    if (changed) render(); else setUpdated();
+    return true;
+  } catch (e) {
+    if (manual) { FLASH = '⚠️ 인터넷 연결을 확인해 주세요'; setUpdated(); }
+    if (!DATA) app.innerHTML = '<div class="card">데이터를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.</div>';
+    return false;
+  }
 }
 // ---------- 버전 표시 · 새 버전 안내 ----------
+// 예전 버전 화면(index.html)이 남아 있어도 멈추지 않도록 필요한 요소를 직접 만든다
+(function ensureShell() {
+  const h1 = document.querySelector('header h1');
+  if (h1 && !$('#ver')) { const s = document.createElement('span'); s.id = 'ver'; s.className = 'ver'; h1.append(' ', s); }
+  const hd = document.querySelector('header');
+  if (hd && !$('#newver')) { const d = document.createElement('div'); d.id = 'newver'; d.className = 'newver'; d.hidden = true; d.innerHTML = '🆕 새 버전이 있어요 · <b>눌러서 새로고침</b>'; hd.append(d); }
+  if (hd && !document.querySelector('header nav')) {
+    const n = document.createElement('nav');
+    n.innerHTML = '<button data-tab="home" class="on">🏠 홈</button><button data-tab="mine">📌 내 종목</button><button data-tab="find">🔎 찾기</button><button data-tab="help">❓ 도움말</button>';
+    hd.insertBefore(n, $('#newver'));
+  }
+  const ft = document.querySelector('footer');
+  if (ft && !$('#verfoot')) { const s = document.createElement('span'); s.id = 'verfoot'; ft.append(document.createElement('br'), s); }
+  document.title = '돈흐름';
+})();
 $('#ver').textContent = 'v' + self.APP_VERSION;
 $('#verfoot').textContent = `앱 버전 v${self.APP_VERSION} · 배포 ${self.APP_DATE}`;
+let NEWV = null;
 async function checkVersion() {
   try {
     const t = await (await fetch('version.js?t=' + Date.now(), { cache: 'no-store' })).text();
     const m = t.match(/APP_VERSION\s*=\s*'([^']+)'/);
-    if (m && m[1] !== self.APP_VERSION) { const b = $('#newver'); b.hidden = false; b.querySelector('b').textContent = `v${m[1]} 받기 · 눌러서 새로고침`; }
+    if (m && m[1] !== self.APP_VERSION) { NEWV = m[1]; const b = $('#newver'); b.hidden = false; b.querySelector('b').textContent = `v${m[1]} 받기 · 눌러서 새로고침`; }
   } catch {}
 }
-$('#newver').onclick = async () => {
-  try { const r = await navigator.serviceWorker?.getRegistration(); if (r) await r.update(); } catch {}
-  location.reload();
-};
+async function applyUpdate() {
+  const b = $('#newver'); b.querySelector('b').textContent = '새 버전 받는 중…';
+  let reloaded = false;
+  const go = () => { if (!reloaded) { reloaded = true; location.reload(); } };
+  setTimeout(go, 4000);   // 무슨 일이 있어도 4초 뒤 새로고침
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if (reg) {
+      navigator.serviceWorker.addEventListener('controllerchange', go, { once: true });
+      await reg.update();
+      const w = reg.waiting || reg.installing;
+      if (w) { w.postMessage('skipWaiting'); w.addEventListener('statechange', () => { if (w.state === 'activated') go(); }); return; }
+    }
+  } catch {}
+  go();
+}
+$('#newver').addEventListener('click', applyUpdate);
+async function manualReload() {
+  const btn = $('#reload'); if (btn.classList.contains('spin')) return;
+  btn.classList.add('spin'); FLASH = '⏳ 새 데이터 확인 중…'; setUpdated();
+  await Promise.all([load(true), checkVersion(), new Promise(r => setTimeout(r, 600))]);
+  btn.classList.remove('spin');
+}
+$('#reload').addEventListener('click', manualReload);
 checkVersion();
 setInterval(checkVersion, 5 * 60 * 1000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
-$('#reload').onclick = () => { DATA = null; load(); checkVersion(); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { load(); checkVersion(); } });
 load();
 setInterval(load, 60 * 1000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
