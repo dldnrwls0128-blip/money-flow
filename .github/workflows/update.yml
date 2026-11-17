@@ -62,8 +62,8 @@ jobs:
         id: info
         if: steps.fetch.outputs.ran == 'true'
         continue-on-error: true
-        timeout-minutes: 12
-        run: python3 scripts/info.py ${{ inputs.force && '--force' || '' }}
+        timeout-minutes: 11
+        run: python3 -u scripts/info.py ${{ inputs.force && '--force' || '' }}
       - uses: actions/cache/save@v4
         if: steps.info.outputs.info_changed == 'true'
         with:
