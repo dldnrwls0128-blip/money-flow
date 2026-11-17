@@ -383,11 +383,11 @@ const TIP = document.createElement('div'); TIP.id = 'tip'; TIP.hidden = true; do
 let tipEl = null;
 function showTip(el, cx) {
   const t = el.dataset.tip; if (!t) return;
-  tipEl = el; TIP.textContent = t; TIP.hidden = false;
+  tipEl = el; TIP.textContent = t; TIP.style.left = '0px'; TIP.style.top = '0px'; TIP.hidden = false;
   const r = el.getBoundingClientRect();
   const x0 = cx != null ? cx : r.left + r.width / 2;
-  const w = TIP.offsetWidth, h = TIP.offsetHeight, vw = document.documentElement.clientWidth;
-  let left = Math.min(Math.max(8, x0 - w / 2), vw - w - 8);
+  const w = TIP.getBoundingClientRect().width, h = TIP.offsetHeight, vw = Math.min(document.documentElement.clientWidth, window.innerWidth);
+  let left = Math.max(8, Math.min(x0 - w / 2, vw - w - 10));
   let top = r.top - h - 10; if (top < 70) top = r.bottom + 10;
   TIP.style.left = left + 'px'; TIP.style.top = (top + window.scrollY) + 'px';
 }
