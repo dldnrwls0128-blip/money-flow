@@ -15,9 +15,16 @@ function logo(code, name) {
 const OPEN = new Set();   // 펼친 카드/상세 id
 
 // ---------- 내 설정: 이 폰(localStorage)에만 저장 ----------
-function blankCfg() { return { h: [], w: [], os: [], sw: {}, pos: {} }; }
+function blankCfg() { return { h: [], os: [], sw: {}, pos: {}, hName: '보유종목', lists: [{ id: 'w', name: '관심종목', codes: [] }] }; }
+function migrate(c) {   // 예전 저장 형식(w 배열) → 관심 탭 목록
+  if (!Array.isArray(c.lists) || !c.lists.length) c.lists = [{ id: 'w', name: '관심종목', codes: [] }];
+  if (Array.isArray(c.w)) { const l0 = c.lists[0]; l0.codes = [...new Set([...(l0.codes || []), ...c.w])]; delete c.w; }
+  c.lists.forEach(l => { l.codes = l.codes || []; l.name = l.name || '관심'; });
+  c.hName = c.hName || '보유종목';
+  return c;
+}
 function loadCfg() {
-  try { const c = JSON.parse(localStorage.getItem('mf_cfg')); if (c) return Object.assign(blankCfg(), c); } catch {}
+  try { const c = JSON.parse(localStorage.getItem('mf_cfg')); if (c) return migrate(Object.assign(blankCfg(), c)); } catch {}
   return null;
 }
 function saveCfg(c) { localStorage.setItem('mf_cfg', JSON.stringify(c)); }
@@ -29,7 +36,8 @@ function parseSetup(str) {
   decodeURIComponent(str).split('|').forEach(part => {
     const i = part.indexOf(':'); if (i < 0) return;
     const k = part.slice(0, i), v = part.slice(i + 1); if (!v) return;
-    if (k === 'h' || k === 'w' || k === 'os') c[k] = v.split(',').filter(Boolean);
+    if (k === 'h' || k === 'os') c[k] = v.split(',').filter(Boolean);
+    if (k === 'w') c.lists[0].codes = v.split(',').filter(Boolean);
     if (k === 'sw') v.split(';').forEach(x => { const [code, n] = x.split('='); if (code && n) c.sw[code] = n.split(',').map(Number); });
     if (k === 'pos') v.split(';').forEach(x => { const [code, n] = x.split('='); if (code && n) { const [a, q] = n.split(',').map(Number); c.pos[code] = { a, q }; } });
   });
@@ -37,7 +45,10 @@ function parseSetup(str) {
 }
 if (location.hash.startsWith('#setup=')) {
   const old = loadCfg(), nc = parseSetup(location.hash.slice(7));
-  if (old) { nc.w = [...new Set([...(old.w || []), ...nc.w])]; nc.pos = Object.assign({}, old.pos, nc.pos); }
+  if (old) {   // 예전 탭·관심 목록·이름은 그대로 두고 설정 링크 내용만 합침
+    const add = nc.lists[0].codes; nc.lists = old.lists; nc.lists[0].codes = [...new Set([...nc.lists[0].codes, ...add])];
+    nc.hName = old.hName; nc.pos = Object.assign({}, old.pos, nc.pos);
+  }
   saveCfg(nc); history.replaceState(null, '', location.pathname);
 }
 
@@ -180,11 +191,11 @@ function stockCard(code, opt = {}) {
   </div>`;
 }
 function actions(code, c) {
-  const inW = c.w.includes(code), inH = c.h.includes(code);
+  const inL = c.lists.filter(l => l.codes.includes(code)), inH = c.h.includes(code);
   const pe = OPEN.has('pos-' + code);
   return `<div class="acts">
-    <button class="mini" data-act="w" data-code="${code}">${inW ? '★ 관심 해제' : '☆ 관심 추가'}</button>
-    <button class="mini" data-act="h" data-code="${code}">${inH ? '보유 삭제' : '+ 보유 추가'}</button>
+    <button class="mini ${inL.length ? 'on2' : ''}" data-act="pick" data-code="${code}">${inL.length ? `★ ${esc(inL.length === 1 ? inL[0].name : '관심 ' + inL.length + '곳')}` : '☆ 관심 추가'}</button>
+    <button class="mini" data-act="h" data-code="${code}">${inH ? esc(c.hName) + '에서 삭제' : '+ ' + esc(c.hName)}</button>
     ${inH ? `<button class="mini" data-toggle="pos-${code}">평단·수량</button>` : ''}</div>
     ${inH && pe ? `<div class="posf"><input inputmode="numeric" id="pa-${code}" placeholder="평단(원)" value="${c.pos[code]?.a ?? ''}">
       <input inputmode="numeric" id="pq-${code}" placeholder="수량(주)" value="${c.pos[code]?.q ?? ''}">
@@ -231,15 +242,60 @@ function viewHome() {
   ${OPEN.has('allsec') ? D.sectors_all.map(sectorCard).join('') + `<button class="pickbtn" data-toggle="allsec">▲ 접기</button>`
     : `<button class="pickbtn" data-toggle="allsec">▼ 전체 업종 점수 펼치기</button>`}`;
 }
-function viewMine() {
+const sortS = a => a.slice().sort((x, y) => ((ALL[y] || {}).s ?? -1) - ((ALL[x] || {}).s ?? -1));
+function viewHold() {
   const c = cfg(); let h = '';
   if (!loadCfg()) h += `<div class="card meta">아직 이 폰에 저장된 내 종목이 없어 기본 목록을 보여줘요. 찾기 탭에서 추가하거나 설정 링크로 한 번 열어 주세요.</div>`;
-  const sortS = a => a.slice().sort((x, y) => ((ALL[y] || {}).s ?? -1) - ((ALL[x] || {}).s ?? -1));
-  h += `<h2>📌 보유 종목 (${c.h.length})</h2>` + (c.h.length ? sortS(c.h).map(x => stockCard(x, { k: '-h' })).join('') : '<div class="card meta">찾기 탭에서 + 보유 추가를 눌러 주세요.</div>');
+  h += `<div class="tabhead"><h2>📌 ${esc(c.hName)} (${c.h.length})</h2><button class="mini" data-act="renh">✏️ 이름</button></div>`;
+  h += c.h.length ? sortS(c.h).map(x => stockCard(x, { k: '-h' })).join('') : '<div class="card meta">찾기 탭에서 + 추가를 눌러 주세요.</div>';
   const os = (DATA.overseas || []).filter(o => c.os.includes(o.code));
   if (os.length) h += `<h2>🌎 해외·코인</h2>` + os.map(o => overseasCard(o, c)).join('');
-  h += `<h2>⭐ 관심 종목 (${c.w.length})</h2>` + (c.w.length ? sortS(c.w).map(x => stockCard(x, { k: '-w' })).join('') : '<div class="card meta">찾기 탭에서 ☆ 관심 추가를 눌러 주세요.</div>');
   return h;
+}
+function curList(c) { const id = localStorage.getItem('mf_wtab'); return c.lists.find(l => l.id === id) || c.lists[0]; }
+function viewWatch() {
+  const c = cfg(), L = curList(c);
+  const chips = c.lists.map(l => `<button class="chip ${l.id === L.id ? 'on' : ''}" data-act="wtab" data-id="${l.id}">${esc(l.name)} <span class="cnt">${l.codes.length}</span></button>`).join('')
+    + `<button class="chip add" data-act="addtab">+ 탭 추가</button>`;
+  return `<div class="chips" id="chips">${chips}</div>
+    <div class="tabhead"><h2>⭐ ${esc(L.name)} (${L.codes.length})</h2>
+      <span><button class="mini" data-act="rentab" data-id="${L.id}">✏️ 이름</button>${c.lists.length > 1 ? ` <button class="mini" data-act="deltab" data-id="${L.id}">🗑 삭제</button>` : ''}</span></div>
+    <div class="meta hint">탭을 길게 누르면 이름을 바꿀 수 있어요</div>
+    ${L.codes.length ? sortS(L.codes).map(x => stockCard(x, { k: '-w' + L.id })).join('') : `<div class="card meta">찾기 탭이나 종목 카드에서 ☆ 관심 추가 → '${esc(L.name)}'를 고르면 여기에 들어와요.</div>`}`;
+}
+// ---------- 간단한 창(이름 입력·탭 고르기) ----------
+function modal(html) {
+  closeModal();
+  const m = document.createElement('div'); m.id = 'modal'; m.innerHTML = `<div class="mbox">${html}</div>`;
+  m.addEventListener('click', e => { if (e.target === m) closeModal(); });
+  document.body.appendChild(m); return m;
+}
+function closeModal() { const m = $('#modal'); if (m) m.remove(); }
+function askName(title, val, cb) {
+  const m = modal(`<b>${esc(title)}</b><input id="mname" maxlength="12" value="${esc(val || '')}" placeholder="탭 이름 (최대 12자)">
+    <div class="mrow"><button class="mini" id="mcancel">취소</button><button class="mini on" id="mok">확인</button></div>`);
+  const inp = m.querySelector('#mname'); setTimeout(() => { inp.focus(); inp.select(); }, 50);
+  const ok = () => { const v = inp.value.trim(); if (!v) { inp.focus(); return; } closeModal(); cb(v); };
+  m.querySelector('#mok').onclick = ok; m.querySelector('#mcancel').onclick = closeModal;
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) ok(); });
+}
+function newId() { return 'l' + Date.now().toString(36); }
+function pickLists(code) {
+  const c = cfg(), r = ALL[code] || {};
+  const m = modal(`<b>${esc(r.n || code)} → 어느 관심 탭에 넣을까요?</b>
+    <div class="plist">${c.lists.map(l => `<label class="pl"><input type="checkbox" data-id="${l.id}" ${l.codes.includes(code) ? 'checked' : ''}> ${esc(l.name)} <span class="meta">${l.codes.length}종목</span></label>`).join('')}</div>
+    <button class="mini" id="pnew">+ 새 탭 만들어 넣기</button>
+    <div class="mrow"><button class="mini" id="mcancel">취소</button><button class="mini on" id="mok">저장</button></div>`);
+  m.querySelector('#mcancel').onclick = closeModal;
+  m.querySelector('#mok').onclick = () => {
+    const cc = cfg();
+    m.querySelectorAll('input[type=checkbox]').forEach(b => { const l = cc.lists.find(x => x.id === b.dataset.id); if (!l) return;
+      if (b.checked && !l.codes.includes(code)) l.codes.push(code); if (!b.checked) l.codes = l.codes.filter(x => x !== code); });
+    saveCfg(cc); closeModal(); render({ full: true });
+  };
+  m.querySelector('#pnew').onclick = () => askName('새 관심 탭 이름', '', name => {
+    const cc = cfg(); const l = { id: newId(), name, codes: [code] }; cc.lists.push(l); saveCfg(cc); render({ full: true });
+  });
 }
 function findResults() {
   const q = Q.trim().toLowerCase();
@@ -308,8 +364,13 @@ function planEditor() {
     <button class="btn" data-act="plansave">계획 저장</button>`;
 }
 
+function navLabels() {
+  const c = cfg(); const b = document.querySelector('nav [data-tab=hold]');
+  if (b) { b.textContent = '📌 보유'; b.title = c.hName; }
+}
 function render(opts = {}) {
   if (!DATA) return;
+  navLabels();
   const ae = document.activeElement;
   if (TAB === 'find' && ae && ae.id === 'q' && !opts.full) {   // 입력 중에는 검색창을 다시 그리지 않음
     const r = $('#res'); if (r) r.innerHTML = findResults(); setUpdated(); return;
@@ -317,7 +378,8 @@ function render(opts = {}) {
   setUpdated();
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === TAB));
   const y = window.scrollY;
-  app.innerHTML = (TAB === 'home' ? viewHome() : TAB === 'mine' ? viewMine() : TAB === 'find' ? viewFind() : viewHelp())
+  if (TAB === 'mine') TAB = 'hold';
+  app.innerHTML = (TAB === 'home' ? viewHome() : TAB === 'hold' ? viewHold() : TAB === 'watch' ? viewWatch() : TAB === 'find' ? viewFind() : viewHelp())
     + (DATA.errors && DATA.errors.length ? `<div class="card meta">일부 데이터를 못 받았어요: ${DATA.errors.length}건</div>` : '');
   window.scrollTo(0, y);
   const q = $('#q');
@@ -329,7 +391,13 @@ document.addEventListener('click', e => {
   if (t.dataset.tab) { e.preventDefault(); TAB = t.dataset.tab; window.scrollTo(0, 0); render({ full: true }); return; }
   if (t.dataset.toggle) { const id = t.dataset.toggle; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); render({ full: true }); return; }
   const c = cfg(), code = t.dataset.code;
-  if (t.dataset.act === 'w') c.w = c.w.includes(code) ? c.w.filter(x => x !== code) : [...c.w, code];
+  if (t.dataset.act === 'pick') { pickLists(code); return; }
+  if (t.dataset.act === 'wtab') { localStorage.setItem('mf_wtab', t.dataset.id); render({ full: true }); return; }
+  if (t.dataset.act === 'addtab') { askName('새 관심 탭 이름', '', name => { const cc = cfg(); const l = { id: newId(), name, codes: [] }; cc.lists.push(l); saveCfg(cc); localStorage.setItem('mf_wtab', l.id); render({ full: true }); }); return; }
+  if (t.dataset.act === 'rentab') { const l = c.lists.find(x => x.id === t.dataset.id); askName('탭 이름 바꾸기', l.name, name => { const cc = cfg(); cc.lists.find(x => x.id === l.id).name = name; saveCfg(cc); render({ full: true }); }); return; }
+  if (t.dataset.act === 'renh') { askName('보유 탭 이름 바꾸기', c.hName, name => { const cc = cfg(); cc.hName = name; saveCfg(cc); render({ full: true }); }); return; }
+  if (t.dataset.act === 'deltab') { const l = c.lists.find(x => x.id === t.dataset.id); if (c.lists.length < 2 || !confirm(`'${l.name}' 탭을 삭제할까요? (안의 ${l.codes.length}종목 목록도 지워져요)`)) return;
+    c.lists = c.lists.filter(x => x.id !== l.id); saveCfg(c); localStorage.removeItem('mf_wtab'); render({ full: true }); return; }
   if (t.dataset.act === 'h') {
     if (c.h.includes(code)) { if (!confirm('보유 종목에서 삭제할까요?')) return; c.h = c.h.filter(x => x !== code); delete c.pos[code]; }
     else c.h = [...c.h, code];
@@ -378,6 +446,17 @@ async function load(manual) {
     return false;
   }
 }
+// ---------- 관심 탭 길게 누르기 → 이름 바꾸기 ----------
+let lpT = null, lpFired = false, lpXY = [0, 0];
+document.addEventListener('pointerdown', e => {
+  const ch = e.target.closest('.chip[data-id]'); if (!ch) return; lpFired = false; lpXY = [e.clientX, e.clientY];
+  lpT = setTimeout(() => { lpFired = true; const c = cfg(); const l = c.lists.find(x => x.id === ch.dataset.id);
+    if (l) askName('탭 이름 바꾸기', l.name, name => { const cc = cfg(); cc.lists.find(x => x.id === l.id).name = name; saveCfg(cc); render({ full: true }); }); }, 600);
+});
+['pointerup', 'pointercancel', 'pointerleave', 'pointermove'].forEach(ev => document.addEventListener(ev, e => { if (ev === 'pointermove' && Math.abs(e.clientX - lpXY[0]) + Math.abs(e.clientY - lpXY[1]) < 10) return; if (ev === 'pointerleave' && e.target !== document) return; clearTimeout(lpT); }));
+document.addEventListener('click', e => { if (lpFired && !e.target.closest('.mbox')) { e.stopPropagation(); e.preventDefault(); lpFired = false; } }, true);
+document.addEventListener('contextmenu', e => { if (e.target.closest('.chip')) e.preventDefault(); });
+
 // ---------- 가격 띠 말풍선 (PC: 마우스 올리기 · 폰: 누르기) ----------
 const TIP = document.createElement('div'); TIP.id = 'tip'; TIP.hidden = true; document.body.appendChild(TIP);
 let tipEl = null;
@@ -404,6 +483,7 @@ window.addEventListener('scroll', () => { if (!TIP.hidden) { delete TIP.dataset.
 
 // ---------- 버전 표시 · 새 버전 안내 ----------
 // 예전 버전 화면(index.html)이 남아 있어도 멈추지 않도록 필요한 요소를 직접 만든다
+const NAV = '<button data-tab="home" class="on">🏠 홈</button><button data-tab="hold">📌 보유</button><button data-tab="watch">⭐ 관심</button><button data-tab="find">🔎 찾기</button><button data-tab="help">❓ 도움말</button>';
 (function ensureShell() {
   const h1 = document.querySelector('header h1');
   if (h1 && !$('#ver')) { const s = document.createElement('span'); s.id = 'ver'; s.className = 'ver'; h1.append(' ', s); }
@@ -411,9 +491,10 @@ window.addEventListener('scroll', () => { if (!TIP.hidden) { delete TIP.dataset.
   if (hd && !$('#newver')) { const d = document.createElement('div'); d.id = 'newver'; d.className = 'newver'; d.hidden = true; d.innerHTML = '🆕 새 버전이 있어요 · <b>눌러서 새로고침</b>'; hd.append(d); }
   if (hd && !document.querySelector('header nav')) {
     const n = document.createElement('nav');
-    n.innerHTML = '<button data-tab="home" class="on">🏠 홈</button><button data-tab="mine">📌 내 종목</button><button data-tab="find">🔎 찾기</button><button data-tab="help">❓ 도움말</button>';
+    n.innerHTML = NAV;
     hd.insertBefore(n, $('#newver'));
   }
+  const nv = document.querySelector('header nav'); if (nv && !nv.querySelector('[data-tab=watch]')) nv.innerHTML = NAV;
   const ft = document.querySelector('footer');
   if (ft && !$('#verfoot')) { const s = document.createElement('span'); s.id = 'verfoot'; ft.append(document.createElement('br'), s); }
   document.title = '돈흐름';
