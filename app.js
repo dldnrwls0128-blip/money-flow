@@ -185,6 +185,7 @@ function stockCard(code, opt = {}) {
       <div class="meta">${money(r.p)} <span class="${cls(r.c)}">${pct(r.c)}</span>${r.sec ? ' · ' + esc(r.sec) : ''}</div></div>
       <button class="sbtn c-${L_}" data-toggle="${id}"><span class="score">${r.s ?? '–'}</span><span class="badge b-${L_}">${lbl(r.s)}</span><span class="meta">왜? ▾</span></button></div>
     <div class="bar"><i style="width:${(r.s || 0) * 10}%;background:${COLOR[L_]}"></i></div>
+    ${opt.tag ? `<div class="tags">${opt.tag}</div>` : ''}
     ${OPEN.has(id) ? detailHTML(id, r) : ''}
     ${pl}${gauge(r.p, L, c.sw[code] ? null : r.lw, false, !!c.sw[code])}
     ${actions(code, c)}
@@ -263,6 +264,46 @@ function viewWatch() {
     <div class="meta hint">탭을 길게 누르면 이름을 바꿀 수 있어요</div>
     ${L.codes.length ? sortS(L.codes).map(x => stockCard(x, { k: '-w' + L.id })).join('') : `<div class="card meta">찾기 탭이나 종목 카드에서 ☆ 관심 추가 → '${esc(L.name)}'를 고르면 여기에 들어와요.</div>`}`;
 }
+// ---------- 🎯 매수 탭: 점수 좋고 지금 매수 구간 ----------
+const PREF_RE = /(\d?우[A-C]?|우선주)$|스팩|SPAC|ETN|리츠$/;
+const BUY_MIN_TV = 30;   // 20일 평균 거래대금(억) 하한
+function buyScan(th, hideLow) {
+  const c = cfg(), mine = new Set([...c.h, ...c.lists.flatMap(l => l.codes)]);
+  const inz = [], near = []; let n = 0;
+  for (const [code, r] of Object.entries(ALL)) {
+    if (r.s == null) continue;
+    const my = mine.has(code);
+    if (!my && (r.pf || PREF_RE.test(r.n) || (r.a20 ?? 0) < BUY_MIN_TV)) continue;
+    n++;
+    if (r.s < th) continue;
+    const plan = !!c.sw[code];
+    const L = plan ? [c.sw[code][0], c.sw[code][1], c.sw[code][4]] : r.l;
+    if (!L || r.p == null) continue;
+    const [bt, bb] = L, low = !plan && r.lw && String(r.lw[0] || '').startsWith('신저가');
+    if (low && hideLow) continue;
+    const it = { code, s: r.s, d: (r.p / bt - 1) * 100, low, my, plan };
+    if (r.p <= bt * 1.01 && (bb == null || r.p >= bb)) inz.push(it);
+    else if (r.p > bt * 1.01 && r.p <= bt * 1.03) near.push(it);
+  }
+  const so = (x, y) => y.s - x.s || Math.abs(x.d) - Math.abs(y.d);
+  return { inz: inz.sort(so), near: near.sort(so), n };
+}
+function viewBuy() {
+  const th = +(localStorage.getItem('mf_bth') || 6.5), hideLow = localStorage.getItem('mf_bhide') === '1';
+  const { inz, near, n } = buyScan(th, hideLow);
+  const chips = [6.0, 6.5, 7.0].map(v => `<button class="chip ${v === th ? 'on' : ''}" data-act="bth" data-v="${v}">${v.toFixed(1)}점+</button>`).join('')
+    + `<button class="chip ${hideLow ? 'on' : ''}" data-act="bhide">신저가 숨기기</button>`;
+  const card = it => stockCard(it.code, { k: '-b', tag: (it.low ? '<span class="tag t-low" data-tip="52주 신저가라 아래 지지선이 없어요. 현재가~−3%를 임시 매수 구간으로 둔 것이라 반등을 확인한 뒤 사는 게 안전해요">52주 신저가 · 반등 확인</span>' : '') + (it.plan ? '<span class="tag t-plan">내 계획 기준</span>' : '') + (it.my ? '<span class="tag t-my">내 종목</span>' : '') });
+  return `<h2>🎯 점수 좋고 지금 매수 구간인 종목</h2>
+    <div class="meta hint">점수 ${th.toFixed(1)}점 이상 · 현재가가 매수 구간 안 · 20일 평균 거래대금 ${BUY_MIN_TV}억 이상(우선주·스팩 제외) + 내 보유·관심 종목 · 검사 ${fmt(n)}종목 · 내 계획이 있으면 그 구간 기준</div>
+    <div class="chips">${chips}</div>
+    <h2>🔵 지금 매수 구간 (${inz.length})</h2>
+    ${inz.length ? inz.map(card).join('') : '<div class="card meta">지금 조건에 맞는 종목이 없어요. 점수 기준을 낮춰 보세요.</div>'}
+    <h2>⏳ 가까워지는 중 (${near.length})</h2>
+    <div class="meta hint">매수 구간 위쪽보다 0~3% 위 · 조금 내려오면 매수 구간</div>
+    ${near.length ? near.map(card).join('') : '<div class="card meta">해당 종목이 없어요.</div>'}
+    <div class="meta hint">참고용이에요. 점수는 공개 시세로 계산한 근사치이고, 매수 구간은 일봉 지지선으로 자동 계산한 값이에요.</div>`;
+}
 // ---------- 간단한 창(이름 입력·탭 고르기) ----------
 function modal(html) {
   closeModal();
@@ -340,6 +381,7 @@ function viewHelp() {
     <li>업종 Top 5: 상위 종목 거래대금이 너무 작은 업종은 빼요</li></ul></div>
   <div class="card"><b>갱신</b><ul class="why"><li>평일 08:50~15:50 약 10분마다 시세·점수 갱신, 18:10쯤 전 종목 일별 데이터(수급·일봉) 갱신. GitHub 일정상 몇 분 늦을 수 있어요.</li>
     <li>앱은 1분마다 새 데이터를 확인해요. 초 단위 실시간 시세는 아니에요.</li></ul></div>
+  <div class="card"><b>🎯 매수 탭</b><ul class="why"><li>점수가 기준(6.0/6.5/7.0점) 이상이고 현재가가 매수 구간 안에 있는 종목을 점수 높은 순으로 보여줘요.</li><li>전 종목 중 20일 평균 거래대금 30억 이상(우선주·스팩 제외) + 내 보유·관심 종목을 검사해요. 내 계획이 있으면 그 구간으로 판단해요.</li><li>"가까워지는 중"은 매수 구간 위쪽보다 0~3% 위에 있는 종목이에요.</li><li>"52주 신저가" 표시는 아래 지지선이 없어 임시 구간이라 반등 확인 뒤 사는 게 안전해요.</li></ul></div>
   <div class="card"><b>내 종목 저장</b><ul class="why"><li>관심·보유 종목, 평단·수량, 스윙 계획은 이 폰에만 저장되고 어디에도 올라가지 않아요. 앱 데이터를 지우면 사라져요.</li></ul>
     <details ${OPEN.has('plan') ? 'open' : ''}><summary data-toggle-keep="plan">⚙️ 내 매매 계획 직접 넣기</summary>${planEditor()}</details></div>`;
 }
@@ -366,7 +408,7 @@ function planEditor() {
 
 function navLabels() {
   const c = cfg(); const b = document.querySelector('nav [data-tab=hold]');
-  if (b) { b.textContent = '📌 보유'; b.title = c.hName; }
+  if (b) b.title = c.hName;
 }
 function render(opts = {}) {
   if (!DATA) return;
@@ -379,7 +421,7 @@ function render(opts = {}) {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === TAB));
   const y = window.scrollY;
   if (TAB === 'mine') TAB = 'hold';
-  app.innerHTML = (TAB === 'home' ? viewHome() : TAB === 'hold' ? viewHold() : TAB === 'watch' ? viewWatch() : TAB === 'find' ? viewFind() : viewHelp())
+  app.innerHTML = (TAB === 'home' ? viewHome() : TAB === 'hold' ? viewHold() : TAB === 'watch' ? viewWatch() : TAB === 'buy' ? viewBuy() : TAB === 'find' ? viewFind() : viewHelp())
     + (DATA.errors && DATA.errors.length ? `<div class="card meta">일부 데이터를 못 받았어요: ${DATA.errors.length}건</div>` : '');
   window.scrollTo(0, y);
   const q = $('#q');
@@ -392,6 +434,8 @@ document.addEventListener('click', e => {
   if (t.dataset.toggle) { const id = t.dataset.toggle; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); render({ full: true }); return; }
   const c = cfg(), code = t.dataset.code;
   if (t.dataset.act === 'pick') { pickLists(code); return; }
+  if (t.dataset.act === 'bth') { localStorage.setItem('mf_bth', t.dataset.v); render({ full: true }); return; }
+  if (t.dataset.act === 'bhide') { localStorage.setItem('mf_bhide', localStorage.getItem('mf_bhide') === '1' ? '0' : '1'); render({ full: true }); return; }
   if (t.dataset.act === 'wtab') { localStorage.setItem('mf_wtab', t.dataset.id); render({ full: true }); return; }
   if (t.dataset.act === 'addtab') { askName('새 관심 탭 이름', '', name => { const cc = cfg(); const l = { id: newId(), name, codes: [] }; cc.lists.push(l); saveCfg(cc); localStorage.setItem('mf_wtab', l.id); render({ full: true }); }); return; }
   if (t.dataset.act === 'rentab') { const l = c.lists.find(x => x.id === t.dataset.id); askName('탭 이름 바꾸기', l.name, name => { const cc = cfg(); cc.lists.find(x => x.id === l.id).name = name; saveCfg(cc); render({ full: true }); }); return; }
@@ -483,7 +527,8 @@ window.addEventListener('scroll', () => { if (!TIP.hidden) { delete TIP.dataset.
 
 // ---------- 버전 표시 · 새 버전 안내 ----------
 // 예전 버전 화면(index.html)이 남아 있어도 멈추지 않도록 필요한 요소를 직접 만든다
-const NAV = '<button data-tab="home" class="on">🏠 홈</button><button data-tab="hold">📌 보유</button><button data-tab="watch">⭐ 관심</button><button data-tab="find">🔎 찾기</button><button data-tab="help">❓ 도움말</button>';
+const NAV = [['home', '🏠', '홈'], ['buy', '🎯', '매수'], ['hold', '📌', '보유'], ['watch', '⭐', '관심'], ['find', '🔎', '찾기'], ['help', '❓', '도움말']]
+  .map(([t, i, n], k) => `<button data-tab="${t}"${k ? '' : ' class="on"'}><i>${i}</i><span>${n}</span></button>`).join('');
 (function ensureShell() {
   const h1 = document.querySelector('header h1');
   if (h1 && !$('#ver')) { const s = document.createElement('span'); s.id = 'ver'; s.className = 'ver'; h1.append(' ', s); }
@@ -494,7 +539,7 @@ const NAV = '<button data-tab="home" class="on">🏠 홈</button><button data-ta
     n.innerHTML = NAV;
     hd.insertBefore(n, $('#newver'));
   }
-  const nv = document.querySelector('header nav'); if (nv && !nv.querySelector('[data-tab=watch]')) nv.innerHTML = NAV;
+  const nv = document.querySelector('header nav'); if (nv && !nv.querySelector('[data-tab=buy]')) nv.innerHTML = NAV;
   const ft = document.querySelector('footer');
   if (ft && !$('#verfoot')) { const s = document.createElement('span'); s.id = 'verfoot'; ft.append(document.createElement('br'), s); }
   document.title = '돈흐름';

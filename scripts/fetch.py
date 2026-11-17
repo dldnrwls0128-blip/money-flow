@@ -300,7 +300,8 @@ def main():
             total, pt, f = score_parts(d["flows"], q["tv"], d["avgtv20"], frac, q["pct"], mkt_pct.get(q["mkt"]), q["price"],
                                        d["lo60"], d["hi60"], d.get("lo52"), d.get("hi52"))
             f["rk"] = rank.get(c); f["tot"] = len(rank)
-            r.update(s=total, pt=pt, f=f)
+            r.update(s=total, pt=pt, f=f, a20=round(d["avgtv20"] / 1e8))
+            if PREF.search(q["name"]): r["pf"] = 1
             lc = lv_compact(round_levels(levels(q["price"], d.get("sr"))))
             if lc: r["l"], r["lw"] = lc
         else:
