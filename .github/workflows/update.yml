@@ -9,6 +9,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      force:
+        description: '일별 데이터까지 새로 받기'
+        type: boolean
+        default: false
 permissions:
   contents: write
   pages: write
@@ -31,7 +36,7 @@ jobs:
       - name: fetch
         id: fetch
         if: github.event_name != 'push'
-        run: python3 scripts/fetch.py
+        run: python3 scripts/fetch.py ${{ inputs.force && '--force' || '' }}
       - name: commit
         if: steps.fetch.outputs.ran == 'true'
         run: |
