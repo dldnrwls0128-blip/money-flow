@@ -2,6 +2,16 @@
 const $ = s => document.querySelector(s);
 const app = $('#app');
 let DATA = null, ALL = {}, ALL_UPD = null, TAB = 'home', Q = '';
+let LOGOS = new Set();
+fetch('logos/index.json?t=' + Math.floor(Date.now() / 3600000), { cache: 'no-store' }).then(r => r.json()).then(a => { LOGOS = new Set(a); if (DATA) render({ full: true }); }).catch(() => {});
+const LCOL = ['#2563eb', '#16a34a', '#db2777', '#ea580c', '#7c3aed', '#0891b2', '#ca8a04', '#dc2626'];
+function logo(code, name) {
+  const ch = String(name || code || '?').trim().charAt(0);
+  let h = 0; for (const c of String(code)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const fb = `<span class="logo lfb" style="background:${LCOL[h % LCOL.length]}">${esc(ch)}</span>`;
+  if (!LOGOS.has(code)) return fb;
+  return `<img class="logo" src="logos/${encodeURIComponent(code)}.webp" alt="" loading="lazy" decoding="async" width="26" height="26" onerror="this.outerHTML=this.dataset.fb" data-fb='${fb.replace(/'/g, '&#39;')}'>`;
+}
 const OPEN = new Set();   // 펼친 카드/상세 id
 
 // ---------- 내 설정: 이 폰(localStorage)에만 저장 ----------
@@ -145,7 +155,7 @@ function stockCard(code, opt = {}) {
   }
   const L_ = lvl(r.s);
   return `<div class="card">
-    <div class="row"><div><div class="name">${esc(r.n)} <span class="meta">${code}</span></div>
+    <div class="row"><div><div class="name nm">${logo(code, r.n)}<span>${esc(r.n)} <span class="meta">${code}</span></span></div>
       <div class="meta">${money(r.p)} <span class="${cls(r.c)}">${pct(r.c)}</span>${r.sec ? ' · ' + esc(r.sec) : ''}</div></div>
       <button class="sbtn c-${L_}" data-toggle="${id}"><span class="score">${r.s ?? '–'}</span><span class="badge b-${L_}">${lbl(r.s)}</span><span class="meta">왜? ▾</span></button></div>
     <div class="bar"><i style="width:${(r.s || 0) * 10}%;background:${COLOR[L_]}"></i></div>
@@ -182,7 +192,7 @@ function sectorCard(s, i) {
 function overseasCard(o, c) {
   const L = c.sw[o.code] ? [c.sw[o.code][0], c.sw[o.code][1], c.sw[o.code][4], c.sw[o.code][2], c.sw[o.code][3]] : o.l;
   const isCoin = !o.at;
-  return `<div class="card"><div class="row"><div><div class="name">${esc(o.n)}</div><div class="meta">${esc(o.full || '')}${o.at ? ' · ' + kst(o.at) + ' 기준' : ''}</div>
+  return `<div class="card"><div class="row"><div><div class="name nm">${logo(o.code, o.n)}<span>${esc(o.n)}</span></div><div class="meta">${esc(o.full || '')}${o.at ? ' · ' + kst(o.at) + ' 기준' : ''}</div>
     <span class="badge b-n">해외·코인 · 점수 없음</span></div>
     <div style="text-align:right"><div class="name">${money(o.p, true)}</div><div class="${cls(o.c)}">${pct(o.c)}</div>${o.krw ? `<div class="meta">${fmt(o.krw, 1)}원</div>` : ''}</div></div>
     ${isCoin && !L ? '<div class="meta" style="margin-top:8px">코인은 무료 일봉(고가·저가) 데이터가 없어 가격 범위는 생략해요.</div>' : gauge(o.p, L, c.sw[o.code] ? null : o.lw, true, !!c.sw[o.code])}</div>`;

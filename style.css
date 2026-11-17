@@ -79,3 +79,7 @@ button,nav button,.mini,.pickbtn,.sbtn{touch-action:manipulation}
 .z-r{color:#f87171}.z-b{color:#60a5fa}.z-g{color:#4ade80}
 .plan-ed{border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0}
 .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}.pgrid label{display:block}
+
+.nm{display:flex;align-items:center;gap:8px}
+.logo{width:26px;height:26px;border-radius:50%;flex:0 0 26px;object-fit:cover;background:#fff}
+.lfb{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800}

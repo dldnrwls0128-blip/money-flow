@@ -39,6 +39,11 @@ jobs:
           path: cache/daily.json
           key: daily-${{ github.run_id }}
           restore-keys: daily-
+      - uses: actions/cache/restore@v4
+        with:
+          path: logos
+          key: logos-${{ github.run_id }}
+          restore-keys: logos-
       - name: fetch
         id: fetch
         run: python3 scripts/fetch.py ${{ inputs.force && '--force' || '' }}
@@ -47,6 +52,15 @@ jobs:
         with:
           path: cache/daily.json
           key: daily-${{ github.run_id }}
+      - name: logos
+        id: logos
+        if: steps.fetch.outputs.ran == 'true'
+        run: pip install -q pillow && python3 scripts/logos.py
+      - uses: actions/cache/save@v4
+        if: steps.logos.outputs.logos_changed == 'true'
+        with:
+          path: logos
+          key: logos-${{ github.run_id }}
       # 하루 1번 작은 기록만 커밋 (스케줄이 60일 무활동으로 꺼지지 않게)
       - name: daily heartbeat
         if: steps.fetch.outputs.daily_full == 'true' && github.event_name == 'schedule'
@@ -57,7 +71,7 @@ jobs:
           git add status/last_daily.txt && git commit -m "status: daily refresh" && git push || true
       - name: site
         if: steps.fetch.outputs.ran == 'true'
-        run: mkdir -p _site && cp -r index.html version.js app.js style.css sw.js manifest.webmanifest data.json all.json icons _site/ && touch _site/.nojekyll
+        run: mkdir -p _site && cp -r index.html version.js app.js style.css sw.js manifest.webmanifest data.json all.json icons logos _site/ && touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         if: steps.fetch.outputs.ran == 'true'
         with:
