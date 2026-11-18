@@ -85,8 +85,9 @@ function sigOf(code) {   // 단 하나의 매수 신호: 시장 폭 45%↑ · 2�
   if (!LEAD) return { k: 'n', t: '데이터 불러오는 중' };
   if (!s) return { k: 'n', t: '점수 없음', why: '20일 평균 거래대금 10억 미만이거나 우선주·스팩·리츠, 또는 상장 140거래일 미만이라 계산 대상이 아니에요.' };
   if (s.f) return { k: 'r', t: '제외 (관리종목·거래정지)', why: '조건에 맞아도 관리종목·거래정지 종목은 사지 않아요.' };
-  if (s.p && LEAD.on) return { k: 'g', t: '매수 신호', why: '규칙 조건을 모두 채웠어요. 투자금의 1/9, 화요일 시가 부근 지정가로 나눠서.' };
-  if (s.p) return { k: 'y', t: '후보 (시장 폭 대기)', why: `종목 조건은 채웠지만 시장 폭이 ${LEAD.breadth.pct}%로 45% 미만이라 지금은 매수 아님.` };
+  const nx = LEAD.check ? d8(LEAD.check.next) : '다음 점검일';
+  if (s.p && LEAD.on) return { k: 'g', t: '매수 신호 (5칸 안)', why: `규칙 조건을 모두 채운 5종목 안이에요. 점검일(격주 수요일) 장 마감 기준이면 다음날 시가에 투자금의 1/5. 다음 점검 ${nx}.` };
+  if (s.p) return { k: 'y', t: '후보 (시장 폭 대기)', why: `종목 조건은 채웠지만 시장 폭이 ${LEAD.breadth.pct}%로 45% 미만이라 지금은 매수 아님. 다음 점검 ${nx}.` };
   return { k: 'r', t: '매수 신호 아님', why: missing(s).join(' · ') };
 }
 function missing(s) {
@@ -97,7 +98,8 @@ function missing(s) {
   if (s.h < -10) m.push('52주 고점에서 10% 넘게 떨어짐');
   if (!s.k) m.push('20일 평균 거래대금 30억 미만');
   else if (!s.rk && s.it[2] && s.h >= -10) m.push('업종 안 고점에 더 가까운 종목이 3개 넘음');
-  return m.length ? m : ['업종 안 상위 3 아님'];
+  if (!m.length && s.rk) m.push(`업종 안 ${s.rk}위 — 5칸이 앞 순위(업종마다 1등 먼저) 종목으로 이미 참`);
+  return m.length ? m : ['5칸 안에 못 듦'];
 }
 function itemWhy(s, i) {
   const secTxt = s.sp ? `이번 주 업종 순위 ${s.sp}위` : '업종 순위 없음 (5종목 미만 업종)';
@@ -115,15 +117,22 @@ function scoreDetail(code) {
     <div class="wbar"><i style="width:${s.it[i] / mx * 100}%;background:${SC_COL[i]}"></i></div><div class="meta">${itemWhy(s, i)}</div></div>`).join('');
   return `<div class="detail">${rows}<div class="meta">점수·신호: ${d8(LEAD.asof)} 장 마감 기준 · <a href="#" data-act="method">점수 기준·과거 검증 보기</a></div></div>`;
 }
-function holdAdvice(code, r) {   // 보유 종목: 손절(−15% 종가) · 목록 이탈 매도 · 시장 폭 매도
+const STOP_R = 0.20, TP_R = 0.30;
+function holdAdvice(code, r) {   // 보유 종목: −20% 종가 손절 · +30% 절반 익절 · 유지 조건(업종 상위 5·업종 안 6위·고점 15% 안) · 시장 폭
   const c = cfg(); if (!c.h.includes(code)) return '';
   const pos = c.pos[code], s = scOf(code), out = [];
-  const stop = pos && pos.a ? Math.round(pos.a * 0.85) : null;
-  if (stop && r.p != null && r.p <= stop) out.push(['r', `손절: 지금 가격이 손절선 ${fmt(stop)}원(매수가 −15%) 아래예요. 오늘 종가도 아래면 다음 날 매도.`]);
-  else if (LEAD && !LEAD.on) out.push(['r', '매도: 시장 폭이 45% 미만이라 규칙상 전부 현금이에요. 다음 점검(월요일 마감 뒤) 기준으로 화요일 정리.']);
-  else if (LEAD && !(s && s.p)) out.push(['r', '매도: 주도주 목록(2주 연속 상위 3 업종의 상위 3)에서 빠졌어요. 다음 점검 기준으로 화요일 정리.']);
-  else if (LEAD) out.push(['g', '보유 유지: 아직 목록 안이고 손절선 위예요.']);
-  return out.map(([k, t]) => `<div class="hadv s-${k}">${t}${stop ? `<span class="meta"> · 손절선 ${fmt(stop)}원 (평단 ${fmt(pos.a)}원 × 0.85, 종가로 확인)</span>` : '<span class="meta"> · 평단을 넣으면 손절선(−15%)을 계산해요</span>'}</div>`).join('');
+  const stop = pos && pos.a ? Math.round(pos.a * (1 - STOP_R)) : null, tp = pos && pos.a ? Math.round(pos.a * (1 + TP_R)) : null;
+  const nx = LEAD && LEAD.check ? d8(LEAD.check.next) : '다음 점검일';
+  if (stop && r.p != null && r.p <= stop) out.push(['r', `손절: 지금 가격이 손절선 ${fmt(stop)}원(평단 −20%) 아래예요. 오늘 종가도 아래면 다음 날 시가에 전부 매도.`]);
+  else if (tp && r.p != null && r.p >= tp && !pos.half) out.push(['y', `절반 익절: 지금 가격이 +30% 선 ${fmt(tp)}원 위예요. 오늘 종가도 위면 다음 날 시가에 절반 매도, 나머지는 유지 조건이 깨질 때까지.`]);
+  if (!out.length || out[0][0] === 'y') {
+    if (LEAD && !LEAD.on) out.push(['r', `시장 폭 ${LEAD.breadth.pct}% (45% 미만): 점검일(${nx}) 장 마감에도 45% 미만이면 다음날 시가에 전부 현금.`]);
+    else if (LEAD && s && (s.keep || s.p)) out.push(['g', `보유 유지: 유지 조건 안 (업종 ${s.sp || '–'}위 · 업종 안 ${s.kr || s.rk || '–'}위 · 고점 ${s.h}%). 다음 점검 ${nx}.`]);
+    else if (LEAD) out.push(['r', `교체 예정: 유지 조건(업종 상위 5 · 업종 안 6위 · 52주 고점 15% 안)에서 벗어났어요. 점검일(${nx}) 장 마감에도 그대로면 다음날 시가에 매도.`]);
+  }
+  const line = stop ? `<span class="meta"> · 손절선 ${fmt(stop)}원 (평단×0.80) · +30% 선 ${fmt(tp)}원 (평단×1.30) · 둘 다 종가로 확인</span>
+    <div class="row" style="margin-top:6px;justify-content:flex-start;gap:8px"><button class="mini${pos.half ? ' on' : ''}" data-act="half" data-code="${code}">${pos.half ? '✓ 절반 익절함' : '절반 익절함 표시'}</button><span class="meta">이 폰에만 저장</span></div>` : '<span class="meta"> · 평단을 넣으면 손절선(−20%)과 +30% 절반 익절 선을 계산해요</span>';
+  return out.map(([k, t], i) => `<div class="hadv s-${k}">${t}${i === out.length - 1 ? line : ''}</div>`).join('');
 }
 // ---------- 점수 밑 상세 펼치기/접기 (종목별로 기억) ----------
 let FOLD = {}; try { FOLD = JSON.parse(localStorage.getItem('mf_fold') || '{}') || {}; } catch {}
@@ -362,7 +371,7 @@ function firstDisclaimer() {
   const m = modal(`<div class="sheet-h"><b>시작하기 전에 꼭 읽어 주세요</b></div>
     <div class="discbig">${DISC}</div>
     <ul class="why"><li>주도주 점수와 매수 신호는 공개 시세로 자동 계산한 <b>근사치</b>예요. 매수·매도 추천이 아니에요.</li>
-      <li>규칙(시장 폭·주도 업종·−15% 손절)은 과거 약 3년 자료로 고른 것이라 앞으로도 맞는다는 보장이 없어요.</li>
+      <li>규칙(시장 폭·주도 업종·5종목·−20% 손절·+30% 절반 익절)과 가상 5칸 계좌 결과는 과거 약 3년 자료로 고른 것이라 앞으로도 맞는다는 보장이 없어요.</li>
       <li>데이터가 늦거나 틀릴 수 있어요. 중요한 결정 전에는 증권사 앱에서 꼭 확인하세요.</li></ul>
     <button class="bigbtn" style="width:100%;margin-top:12px" id="discok">확인했어요</button>`);
   m.classList.add('sheet');
@@ -386,16 +395,17 @@ function methodHTML() {
     <div class="wlegend">${SC_ITEMS.map(([n, w], i) => `<span><span class="dot" style="background:${SC_COL[i]}"></span>${n} ${w}</span>`).join('')}</div>
     ${rows}
     <div class="meta" style="margin-top:8px">색: 8.5점 이상 초록(주도주) · 6~8 노랑(근접) · 6 미만 빨강(약함)</div>
-    <h3>매수 신호 (모두 맞아야 함)</h3><ul class="why"><li>시장 폭 45% 이상 (아니면 <b>전량 현금</b>)</li><li>2주 연속 상위 3 업종</li><li>그 업종 안 상위 3 (20일선 위 · 52주 고점 10% 안 · 거래대금 30억↑)</li><li>관리종목·거래정지 아님 (감사의견 문제는 직접 확인)</li>
-      <li>9칸 중 1칸(투자금의 1/9)씩 · 월요일 장 마감 뒤 확인 → 화요일 시가 부근 지정가로 나눠 매수</li></ul>
-    <h3>매도 규칙</h3><ul class="why"><li><b>종가가 매수가 −15% 아래</b>면 다음 날 매도</li><li>매주 점검에서 <b>목록에서 빠지면</b> 매도 (업종이 상위 3에서 밀리거나 업종 안 3위 밖)</li><li>시장 폭이 45% 밑이면 전부 매도하고 현금 대기</li><li>목표가는 없어요. 목록에 남아 있는 한 들고 가요.</li></ul>
+    <h3>업종 점수 (10점)</h3><ul class="why"><li>네이버 업종(5종목 이상)마다 세 가지를 업종끼리 순위(0~1)로 바꿔 각각 <b>3.3점</b>씩, 합쳐 <b>10점</b>: ① <b>돈 유입 지속</b> = 최근 10일 중 업종 거래대금 비중이 평소(60일)보다 10% 넘게 늘어난 날의 비율 ② <b>60일 강도</b> = 업종 60일 수익률 − 시장 평균 ③ <b>고점 근처 비율</b> = 52주 고점 95% 안 종목 비율.</li>
+      <li>10점이면 세 가지 모두 전체 업종 중 1등이라는 뜻. 색은 종목 점수와 같아요 (8.5↑ 초록 · 6~8 노랑 · 6 미만 빨강). 업종 순위는 이 점수 순서예요.</li></ul>
+    <h3>매수 (점검일에만, 모두 맞아야 함)</h3><ul class="why"><li><b>격주 수요일 장 마감 뒤</b> 점검 (기준일 26.11.18, 휴장이면 그 주 다음 거래일) → <b>다음날(목요일) 시가</b>에 주문</li><li>시장 폭 45% 이상 (아니면 <b>전부 현금</b>)</li><li>이번 주·지난주 같은 요일 모두 상위 3 업종 (2주 연속)</li><li>그 업종 안 20일선 위 · 52주 고점 10% 안 · 거래대금 30억↑ 종목을 고점에 가까운 순으로 줄 세워 <b>업종마다 1등 먼저, 그다음 2등…</b> 최대 <b>5종목</b>, 한 칸 = 투자금의 <b>1/5</b></li><li>관리종목·거래정지 아님 (감사의견 문제는 직접 확인) · 후보가 모자라면 빈 칸은 현금</li></ul>
+    <h3>매도 규칙</h3><ul class="why"><li><b>종가가 매수가 −20% 아래</b>면 다음 날 시가에 전부 매도 (점검일 아니어도)</li><li><b>종가가 매수가 +30% 위</b>면 다음 날 시가에 <b>절반</b> 매도 (한 번만), 나머지는 계속</li><li>점검일에 <b>유지 조건</b>(업종 상위 5 · 업종 안 6위 안 · 52주 고점 15% 안)에서 벗어나면 매도하고 새 후보로 교체</li><li>점검일 시장 폭이 45% 밑이면 전부 매도하고 현금 대기</li></ul>
     <h3>점수가 높을수록 실제로 더 올랐나 (과거 검증)</h3>
     <div class="card inner"><div class="meta">${BT_SC.period} 점검일마다 유동성 종목(20일 평균 거래대금 30억↑) 전부에 점수를 매기고, 다음 점검일까지 1주 수익률과 20거래일 수익률을 평균 냈어요. 수수료 빼기 전·겹치는 표본 포함.</div>
       <table class="atab"><tr><th>점수</th><th>표본</th><th>1주 평균</th><th>1주 오른 비율</th><th>20일 평균</th><th>확인 1년만 1주</th></tr>${tr}</table>
       <ul class="why"><li>점수가 높을수록 평균 수익이 대체로 높았어요: 8.5점 이상 1주 +1.51% vs 2.5점 이하 +0.16%. 마지막 1년(25.11~)만 봐도 −0.27% → +2.51%로 순서대로 올라갔어요.</li>
-        <li><b>매수 신호</b>가 켜진 경우 ${fmt(BT_SC.buy[0])}건: 1주 평균 +${BT_SC.buy[1]}% · 오른 비율 ${BT_SC.buy[2]}% · 20일 평균 +${BT_SC.buy[3]}%.</li>
+        <li>예전 9칸 매수 신호(업종 안 상위 3)가 켜진 경우 ${fmt(BT_SC.buy[0])}건: 1주 평균 +${BT_SC.buy[1]}% · 오른 비율 ${BT_SC.buy[2]}% · 20일 평균 +${BT_SC.buy[3]}%.</li>
         <li>솔직한 한계: 낮은 점수 구간끼리는 순서가 뒤바뀐 때도 있었고(고른 기간엔 2.5점 이하가 3~4.5점보다 나음), 전체 종목을 한 줄로 세운 순위 상관은 거의 0이에요. <b>점수는 '상위 몇 개를 골라내는 데'만 쓸모가 있고 낮은 점수끼리 비교하는 건 의미가 적어요.</b></li>
-        <li>배점은 업종 3·고점 2·업종 안 순위 2 방식과 업종 4·순위 1 방식을 3년 전체로 비교해 순서가 더 깔끔한 쪽을 골랐어요. 그래서 마지막 1년도 완전히 '안 보고' 고른 건 아니에요. 1주 오른 비율은 최고 구간도 53% 정도라 <b>한 종목만 보면 반반에 가까워요</b> — 9칸 분산이 중요한 이유예요.</li></ul></div>
+        <li>배점은 업종 3·고점 2·업종 안 순위 2 방식과 업종 4·순위 1 방식을 3년 전체로 비교해 순서가 더 깔끔한 쪽을 골랐어요. 그래서 마지막 1년도 완전히 '안 보고' 고른 건 아니에요. 1주 오른 비율은 최고 구간도 53% 정도라 <b>한 종목만 보면 반반에 가까워요</b> — 5종목만 들면 한 종목 결과에 계좌가 크게 흔들려요.</li></ul></div>
     ${realBox()}
     <div class="disc">과거 결과가 미래 수익을 보장하지 않아요. 지금 상장된 종목만 봐서(생존 편향) 실제보다 좋게 나왔을 수 있고, 업종은 지금의 네이버 분류를 과거에도 썼어요.</div>
     ${discLine()}`;
@@ -518,57 +528,136 @@ function leadCard(x, on) {
   const inA = ALL[x.code];
   return `<div class="card lcard"><div class="row"><b>${logo(x.code, x.n)}${esc(x.n)} <span class="meta">${esc(x.code)} · ${esc(x.sec)}</span></b>
       <span class="lsc c-${lvl(scOf(x.code)?.t)}" data-fold="${esc(x.code)}">${scOf(x.code)?.t ?? '–'}<small>/10</small></span></div>
-    <div class="tags">${on ? '<span class="tag t-on">매수 신호 · 비중 1/9</span>' : '<span class="tag t-off">신호 켜지면 후보, 지금은 매수 아님</span>'}</div>
+    <div class="tags">${on ? '<span class="tag t-on">매수 신호 · 비중 1/5</span>' : '<span class="tag t-off">시장 폭 45% 넘으면 후보, 지금은 매수 아님</span>'}</div>
     <div class="lgrid"><div><span class="meta">종가</span><b>${fmt(x.c)}원</b></div><div><span class="meta">52주 고점 대비</span><b>${x.hi > 0 ? '+' : ''}${x.hi}%</b></div>
-      <div><span class="meta">20일선</span><b>${fmt(x.ma20)}원</b></div><div><span class="meta">손절선(−15%)</span><b class="dn">${fmt(x.stop)}원</b></div></div>
-    <div class="meta">20일 평균 거래대금 ${fmt(x.tv20)}억 · 손절선은 오늘 종가에 샀다고 칠 때 값 (실제는 <b>내 매수가 × 0.85</b>, 종가로 확인)${inA ? ` · <a href="#" data-act="info" data-code="${esc(x.code)}">종목 정보</a>` : ''}</div>
+      <div><span class="meta">손절선(−20%)</span><b class="dn">${fmt(x.stop)}원</b></div><div><span class="meta">+30% 절반 익절</span><b class="up">${fmt(x.tp)}원</b></div></div>
+    <div class="meta">20일선 ${fmt(x.ma20)}원 · 20일 평균 거래대금 ${fmt(x.tv20)}억 · 두 선은 오늘 종가에 샀다고 칠 때 값 (실제는 <b>내 매수가 × 0.80 / × 1.30</b>, 종가로 확인)${inA ? ` · <a href="#" data-act="info" data-code="${esc(x.code)}">종목 정보</a>` : ''}</div>
     ${scOf(x.code) ? foldBlock(x.code, '<span class="fstate meta">점수 구성 · 이유</span>', scoreDetail(x.code)) : ''}${inA ? actions(x.code, cfg()) : ''}</div>`;
 }
 function realBox() {
+  const R = REPLAY;
   return `<div class="card real"><b>현실적인 기대치</b><ul class="why">
-    <li>과거 약 3년(23.11~26.11) 자료로 시험해 본 결과, 다음날 시가에 사고 체결 손실까지 넣으면 <b>연 20~40% 안팎, 최대 하락 −15~−25%</b> 정도가 현실적인 범위였어요. (종가 체결·운 좋은 요일 기준 연 56%는 위쪽 끝 숫자예요)</li>
-    <li>수익은 <b>몇 달에 몰려서</b> 나요. 한 달 수익 중앙값은 +0.3% 정도로, 제자리이거나 조금 잃는 달이 흔하고 시간의 약 30%는 현금으로 쉬어요. 직전 최고점을 회복하지 못한 기간이 길게는 약 6개월(125거래일), 연속으로 잃은 주가 최대 5주였어요.</li>
-    <li>같은 규칙을 다른 요일에 점검하면 결과가 연 24~56%로 크게 달랐어요. 돈을 5개로 나눠 요일마다 조금씩 운용하면 최대 하락이 약 −10~−11%로 가장 작았어요.</li>
-    <li>지금 상장된 종목만으로 계산(생존 편향, 상장폐지 위험 반영 시 연 −1%p 안팎)했고, 업종은 지금의 네이버 분류를 과거에도 썼어요. <b>과거 결과가 미래 수익을 보장하지 않아요.</b></li></ul></div>`;
+    <li>과거 약 3년(23.11~26.11) 자료로 다음날 시가 체결 + 슬리피지 0.3% + 비용 0.23%를 넣어 시험해 보니, 시작 주·요일에 따라 결과가 크게 달라서 <b>연 20~30% 안팎, 최대 하락 −25~−30%</b> 정도를 현실적인 범위로 봐요.${R ? ` (아래 '과거 시험 결과' 한 경로는 연 ${R.cagr}% · 최대 하락 ${R.mdd}%로 위쪽 결과예요)` : ''}</li>
+    <li>5종목만 들어서 <b>한 종목이 계좌를 크게 흔들어요</b>. 한 번에 −25% 안팎 잃은 매매도 있었고(갭 하락은 −20% 손절선 아래로 체결), 수익은 몇 번의 큰 매매에 몰려요. 이기는 매매는 절반 정도.</li>
+    <li>격주 점검이라 매매는 <b>한 달 4번 안팎</b>, 시간의 약 30%는 현금으로 쉬어요. 직전 최고점을 몇 달씩 회복 못 하는 기간도 있어요.</li>
+    <li>지금 상장된 종목만으로 계산(생존 편향)했고, 업종은 지금의 네이버 분류를 과거에도 썼어요. 규칙도 같은 자료로 골랐어요. <b>과거 결과가 미래 수익을 보장하지 않아요.</b></li></ul></div>`;
 }
 function checklist() {
-  return `<div class="card"><b>매주 할 일 (체크리스트)</b><ol class="why chk">
-    <li><b>월요일 장 마감 뒤</b> 이 화면을 열어 시장 폭을 봐요. <b>45% 미만이면 전부 현금</b>으로 두고 끝.</li>
-    <li>45% 이상이면 <b>2주 연속 상위 3 업종</b>의 후보만 써요 (한 주 더 필요한 업종은 다음 주에).</li>
-    <li>업종당 최대 3종목, 투자금을 <b>9칸으로 나눠 1칸씩</b>. 후보가 모자라면 빈 칸은 현금.</li>
-    <li><b>화요일 시가 부근에 지정가로 나눠서</b> 사요. 급하게 시장가로 따라가지 않기.</li>
-    <li>목록에서 빠진 종목은 팔아요. <b>종가가 내 매수가보다 −15%면</b> 다음 날 팔아요.</li>
-    <li><b>관리종목·거래정지·감사의견 문제</b>가 있는 종목은 조건에 맞아도 빼요. (앱이 관리종목·거래정지는 자동으로 빼지만 직접 한 번 더 확인)</li>
-    <li>더 안정적으로 하고 싶으면 돈을 5개로 나눠 월~금 요일마다 1개씩 같은 규칙으로 점검해도 돼요.</li></ol></div>`;
+  const nx = LEAD && LEAD.check ? d8(LEAD.check.next) : '다음 점검일';
+  return `<div class="card"><b>할 일 (체크리스트)</b><ol class="why chk">
+    <li><b>격주 수요일 장 마감 뒤</b>(다음: ${nx}) 이 화면을 열어 시장 폭을 봐요. <b>45% 미만이면 전부 현금</b>으로 두고 끝.</li>
+    <li>45% 이상이면 <b>2주 연속 상위 3 업종</b>에서 업종마다 1등 먼저, 그다음 2등… <b>최대 5종목</b>. 투자금을 5칸으로 나눠 1칸씩, 모자라면 빈 칸은 현금.</li>
+    <li>가지고 있는 종목은 <b>유지 조건</b>(업종 상위 5 · 업종 안 6위 · 고점 15% 안) 안이면 그대로, 벗어나면 교체.</li>
+    <li><b>다음날(목요일) 시가 부근</b>에 지정가로 나눠서 사고팔아요. 급하게 따라가지 않기.</li>
+    <li><b>매일 종가 확인</b>: 매수가 −20% 아래면 다음 날 시가에 전부 매도, +30% 위면 다음 날 시가에 절반 매도(한 번만).</li>
+    <li><b>관리종목·거래정지·감사의견 문제</b>가 있는 종목은 조건에 맞아도 빼요. (앱이 관리종목·거래정지는 자동으로 빼지만 직접 한 번 더 확인)</li></ol></div>`;
+}
+// ---------- 가상 5칸 계좌 · 과거 시험 · 업종 순위 ----------
+let SLOTS = null, REPLAY = null, SLOTS_TRIED = false;
+async function loadSlots() {
+  SLOTS_TRIED = true;
+  try { const r = await fetch('slots.json?t=' + Date.now(), { cache: 'no-store' }); if (r.ok) SLOTS = (await r.json()).view; } catch {}
+  try { if (!REPLAY) { const r = await fetch('replay.json', { cache: 'no-store' }); if (r.ok) REPLAY = await r.json(); } } catch {}
+}
+const w8 = s => s ? `${s.slice(2, 4)}.${+s.slice(4, 6)}.${+s.slice(6, 8)}` : '–';
+function eqChart(curve, label) {
+  if (!curve || !curve.length) return '';
+  const W = 300, H = 110, n = curve.length;
+  const vals = curve.flatMap(([, a, k]) => [a, k].filter(v => v != null));
+  let lo = Math.min(...vals, 100), hi = Math.max(...vals, 100); if (hi - lo < 4) { hi += 2; lo -= 2; }
+  const xs = i => n < 2 ? W / 2 : (i / (n - 1)) * W, ys = v => H - 4 - ((v - lo) / (hi - lo)) * (H - 8);
+  const line = k => curve.map((r, i) => r[k] == null ? null : `${xs(i).toFixed(1)},${ys(r[k]).toFixed(1)}`).filter(Boolean).join(' ');
+  const dot = n < 2 ? `<circle cx="${W / 2}" cy="${ys(curve[0][1])}" r="4" class="pa"/>` : '';
+  const last = curve[n - 1];
+  return `<svg class="eqc" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="${esc(label)}">
+    <line x1="0" x2="${W}" y1="${ys(100)}" y2="${ys(100)}" class="th"/><polyline points="${line(2)}" class="lk"/><polyline points="${line(1)}" class="la"/>${dot}</svg>
+    <div class="meta row"><span>${w8(curve[0][0])}</span><span><i class="lg la"></i>${esc(label)} ${fmt(last[1], 1)} · <i class="lg lk"></i>코스피 ${last[2] == null ? '–' : fmt(last[2], 1)} <span class="meta">(시작=100)</span></span><span>${w8(last[0])}</span></div>`;
+}
+function slotCard(x) {
+  const k = x.status.startsWith('손절') || x.status.startsWith('교체') ? 'r' : x.status.includes('익절 예정') ? 'y' : 'g';
+  return `<div class="card slot"><div class="row"><b>${logo(x.code, x.n)}${esc(x.n)} <span class="meta">${esc(x.code)}${x.sec ? ' · ' + esc(x.sec) : ''}</span></b><span class="fstate s-${k}">${esc(x.status)}</span></div>
+    <div class="lbig2 ${cls(x.ret)}">${pct(x.ret, 1)} <span class="meta">· 비중 ${x.w}% · ${fmt(x.val)}원</span></div>
+    <div class="lgrid"><div><span class="meta">매수 ${w8(x.ed)} 시가</span><b>${fmt(x.ep)}원</b></div><div><span class="meta">현재(종가)</span><b>${fmt(x.c)}원</b></div>
+      <div><span class="meta">손절선(−20%)</span><b class="dn">${fmt(x.stop)}원</b></div><div><span class="meta">+30% 절반 익절</span><b class="up">${fmt(x.tp)}원</b>${x.half ? '<span class="meta">✓ 절반 팔았음</span>' : ''}</div></div></div>`;
+}
+const emptySlot = i => `<div class="card slot empty"><div class="row"><b><span class="slotno">${i}</span>현금 (조건 맞는 종목 없음)</b><span class="meta">1/5</span></div></div>`;
+function slotsView() {
+  const S = SLOTS;
+  if (!S) return `<div class="card meta">가상 5칸 계좌를 불러오는 중이에요…</div>`;
+  const ord = (S.orders || []).length ? `<div class="card"><b>다음 거래일 시가 주문 (${S.orders.length})</b><ul class="why">${S.orders.map(o => `<li><b class="${o.act === 'buy' ? 'up' : 'dn'}">${o.act === 'buy' ? '매수 1/5' : o.act === 'half' ? '절반 매도' : '매도'}</b> ${esc(o.n)} — ${esc(o.why)}</li>`).join('')}</ul></div>` : '';
+  const allCash = !S.slots.length;
+  const hist = (S.hist || []).length ? S.hist.map(h => `<tr><td>${esc(h.n)}${h.part === '절반' ? ' <span class="meta">절반</span>' : ''}</td><td>${w8(h.ed)}<br><span class="meta">${fmt(h.ep)}</span></td><td>${w8(h.xd)}<br><span class="meta">${fmt(h.xp)}</span></td><td class="${cls(h.ret)}"><b>${pct(h.ret, 1)}</b></td><td class="meta">${esc(h.why)}</td></tr>`).join('') : '';
+  const kr = S.kospi_ret;
+  return `<h2>가상 5칸 계좌 (규칙 그대로 자동 운용)</h2>
+    <div class="meta hint">${w8(S.start)} 가상 ${fmt(S.start_cash / 1e4)}만원으로 시작 · 다음날 시가 체결 + 슬리피지 0.3% + 비용 0.23% 반영 · 서버가 장 마감 뒤 계산 (실제 돈 아님)</div>
+    <div class="card acct"><div class="row"><div><span class="meta">계좌 평가액</span><div class="lbig2 ${cls(S.ret)}">${fmt(S.equity)}원 <span>${pct(S.ret)}</span></div></div>
+      <div style="text-align:right"><span class="meta">현금</span><div><b>${S.cash_pct}%</b></div><span class="meta">코스피 ${kr == null ? '–' : pct(kr)}</span></div></div>
+      ${allCash ? `<div class="ladvice">지금은 <b>5칸 모두 현금</b>이에요. 시장 폭(지금 ${LEAD ? LEAD.breadth.pct : '–'}%)이 점검일에 <b>45%를 넘으면 자동으로 채워져요</b>. 다음 점검 ${d8(S.check.next)}.</div>` : ''}
+      ${eqChart(S.curve, '가상 계좌')}
+      <div class="meta">다음 점검: <b>${esc(S.check.next_txt)}</b>${S.check.is_check_day ? ' · <b>오늘이 점검일</b>' : ''}</div></div>
+    ${ord}
+    ${S.slots.map(slotCard).join('')}${Array.from({ length: S.empty }, (_, i) => emptySlot(S.slots.length + i + 1)).join('')}
+    <div class="card"><b>끝난 매매 기록</b>${hist ? `<table class="atab htab"><tr><th>종목</th><th>매수</th><th>매도</th><th>수익</th><th>이유</th></tr>${hist}</table>` : '<div class="meta">아직 끝난 매매가 없어요.</div>'}</div>`;
+}
+function replayView() {
+  const R = REPLAY; if (!R) return '';
+  const open = OPEN.has('replay');
+  const body = open ? `<div class="meta">${esc(R.rule)} · ${w8(R.start)}~${w8(R.end)} · 가상 계좌가 그때부터 이 규칙만 따랐다면</div>
+      ${eqChart(R.curve, '과거 시험')}
+      <div class="lgrid g3"><div><span class="meta">연 수익</span><b class="up">${R.cagr}%</b></div><div><span class="meta">최대 하락</span><b class="dn">${R.mdd}%</b></div><div><span class="meta">3년 누적</span><b>${pct(R.tot, 0)}</b><span class="meta">코스피 ${pct(R.kospi_tot, 0)}</span></div>
+        <div><span class="meta">이긴 매매</span><b>${R.win}%</b></div><div><span class="meta">평균 이익/손실</span><b>+${R.aw}% / ${R.al}%</b></div><div><span class="meta">매매/월</span><b>${R.pm}번</b></div>
+        <div><span class="meta">평균 보유</span><b>${R.hold}거래일</b></div><div><span class="meta">최악 / 최고 매매</span><b>${R.worst}% / +${R.best}%</b></div><div><span class="meta">현금 시간</span><b>${R.cash}%</b></div></div>
+      <div class="meta">최근 매매 ${Math.min(40, R.trades.length)}개 (총 ${fmt(R.ntr)}번)</div>
+      <table class="atab htab"><tr><th>종목</th><th>매수</th><th>매도</th><th>수익</th><th>보유</th></tr>${R.trades.slice(0, 40).map(t => `<tr><td>${esc(t.n)}</td><td>${w8(t.ed)}</td><td>${w8(t.xd)}</td><td class="${cls(t.ret)}"><b>${pct(t.ret, 1)}</b></td><td class="meta">${t.days}일</td></tr>`).join('')}</table>
+      <div class="disc">과거 시험 결과예요. 시작한 주가 달랐으면 연 20~30%대로 더 낮았던 경우가 많았어요. 생존 편향·같은 자료로 규칙을 고른 점 때문에 실제보다 좋게 나왔을 수 있어요.</div>` : '';
+  return `<div class="card replay"><button class="fhead" data-toggle="replay"><b>과거 시험 결과 (최근 3년 같은 규칙)</b><span class="ftog">${open ? '접기 ▴' : '펼치기 ▾'}</span></button>${body}</div>`;
+}
+function secCard(s) {
+  const L_ = lvl(s.sc), id = 'sec:' + s.n;
+  const chg = s.last == null ? '<span class="chg new">NEW</span>' : s.chg > 0 ? `<span class="chg up">▲${s.chg}</span>` : s.chg < 0 ? `<span class="chg dn">▼${-s.chg}</span>` : '<span class="chg">–</span>';
+  const badge = s.q ? '<span class="tag t-on">2주 연속 · 자격</span>' : s.pos <= 3 ? '<span class="tag t-wait">이번 주 처음 · 한 주 더</span>' : '';
+  const P = [['돈 유입 지속', s.parts[0], `최근 10일 중 ${s.sus}%가 거래대금 비중이 평소보다 늘어난 날 · 지금 평소의 ${s.sh}배`, '#3182f6'],
+    ['60일 강도', s.parts[1], `60일 수익이 시장 평균보다 ${s.rs60 > 0 ? '+' : ''}${s.rs60}%p`, '#2fca73'],
+    ['고점 근처 비율', s.parts[2], `${s.m}종목 중 ${s.bhi}%가 52주 고점 95% 안`, '#a78bfa']];
+  const detail = `<div class="detail">${P.map(([n, v, why, col]) => `<div class="wrow"><div class="row"><b><span class="dot" style="background:${col}"></span>${n}</b><b>${v} <span class="meta">/ 3.3</span></b></div>
+      <div class="wbar"><i style="width:${v / 3.334 * 100}%;background:${col}"></i></div><div class="meta">${why} (업종끼리 순위로 환산)</div></div>`).join('')}
+      <div class="meta">업종 점수 = 세 가지를 업종끼리 순위로 바꿔 각각 3.3점씩 · ${d8(LEAD.asof)} 장 마감 기준 · <a href="#" data-act="method">기준 보기</a></div></div>`;
+  const tops = (s.top || []).map((t, i) => { const sc = scOf(t.code); const tl = lvl(sc && sc.t);
+    return `<div class="secstk"><span class="meta">${i + 1}등</span><b class="${ALL[t.code] ? 'tap' : ''}" ${ALL[t.code] ? `data-act="info" data-code="${esc(t.code)}"` : ''}>${esc(t.n)}</b><span class="meta">고점 ${t.hi > 0 ? '+' : ''}${t.hi}%${t.ok ? '' : ' · 조건 밖'}</span><span class="lsc sm c-${tl}">${sc ? sc.t : '–'}<small>/10</small></span></div>`; }).join('');
+  const head = `<span class="fstate meta">점수 구성 (3가지)</span>`;
+  return `<div class="card seccard"><div class="row"><b><span class="secrk">${s.pos}</span>${esc(s.n)} ${chg}</b><span class="lsc c-${L_}" data-fold="${esc(id)}">${s.sc}<small>/10</small></span></div>
+    <div class="bar"><i style="width:${s.sc * 10}%;background:${COLOR[L_]}"></i></div>
+    <div class="tags">${badge}<span class="meta">지난주 ${s.last == null ? '10위 밖' : s.last + '위'} · 상위 3 연속 ${s.streak}주</span></div>
+    ${tops ? `<div class="secstks">${tops}</div>` : ''}
+    ${foldBlock(id, head, detail)}</div>`;
 }
 function viewLead() {
   const D = LEAD;
   if (!D && LEAD_TRIED) return '<div class="card">주도주 데이터를 아직 못 불러왔어요. 잠시 뒤 새로고침해 주세요. (장 마감 뒤 계산돼요)</div>' + discLine();
   if (!D) { loadLead().then(() => { if (TAB === 'lead') render(); }); return '<div class="card">주도주 데이터를 불러오는 중이에요… (장 마감 뒤 하루 한 번 계산해요)</div>' + discLine(); }
+  if (!SLOTS_TRIED) loadSlots().then(() => { if (TAB === 'lead') render(); });
   const B = D.breadth, th = Math.round(D.rule.br * 100), on = D.on;
   const st = on ? `<span class="lstat on">매수 가능</span>` : `<span class="lstat off">전량 현금 대기</span>`;
   const gauge = `<div class="bgauge"><i style="width:${Math.min(100, B.pct)}%" class="${on ? 'on' : 'off'}"></i><b style="left:${th}%"></b></div>`;
   const need = on ? `기준 ${th}%보다 ${(B.pct - th).toFixed(1)}%p 위예요.` : `${th}%까지 <b>${fmt(B.need)}종목</b>이 더 60일선 위로 올라와야 해요. (60일선 바로 아래 5% 이내 ${B.near5}종목, 10% 이내 ${B.near10}종목)`;
-  const secs = D.sectors.slice(0, 3).map(s => `<div class="lsec"><div class="row"><b>${s.pos}위 ${esc(s.n)}</b>${s.q ? '<span class="tag t-on">2주 연속 · 자격</span>' : '<span class="tag t-wait">이번 주 처음 · 한 주 더 필요</span>'}</div>
-      <div class="meta">거래대금 비중 평소의 ${s.sh}배 (최근 10일 중 ${s.sus}%가 늘어난 날) · 60일 수익 시장보다 ${s.rs60 > 0 ? '+' : ''}${s.rs60}%p · 52주 고점 근처 ${s.bhi}% · ${s.m}종목</div></div>`).join('');
-  const rest = D.sectors.slice(3).map(s => `${s.pos}위 ${esc(s.n)}`).join(' · ');
-  const slots = Math.max(0, 9 - D.picks.length);
   const picks = D.picks.length ? D.picks.map(x => leadCard(x, on)).join('') : '<div class="card meta">2주 연속 업종 안에 조건(20일선 위·52주 고점 10% 안)에 맞는 종목이 없어요.</div>';
-  const nxt = (D.next || []).length ? `<h3>다음 주 후보 (업종이 한 주 더 상위 3이면)</h3>${D.next.map(x => leadCard(x, false)).join('')}` : '';
   const exc = (D.excluded || []).length ? `<div class="meta hint">자동 제외: ${D.excluded.map(x => `${esc(x.n)}(${esc(x.why)})`).join(', ')}</div>` : '';
   const K = (DATA.index || {}).KOSPI, Kq = (DATA.index || {}).KOSDAQ;
   const idx = K && Kq ? `<div class="meta idxline">코스피 <b>${fmt(K.value, 2)}</b> <span class="${cls(K.pct)}">${pct(K.pct)}</span> · 코스닥 <b>${fmt(Kq.value, 2)}</b> <span class="${cls(Kq.pct)}">${pct(Kq.pct)}</span> <span class="meta">(지금 시세)</span></div>` : '';
-  return installCard() + idx + `<div class="card lhead"><div class="row"><b>주도주 로테이션</b><span class="meta">${d8(D.asof)} 장 마감 기준</span></div>
+  const C = D.check || {};
+  return installCard() + idx + `<div class="card lhead"><div class="row"><b>주도주 5종목</b><span class="meta">${d8(D.asof)} 장 마감 기준</span></div>
       <div class="lbig">${B.pct}% ${st}</div>${gauge}
       <div class="meta">시장 폭 = 유동성 종목 ${fmt(B.n)}개 중 60일 평균선 위 ${fmt(B.above)}개. ${need}</div>
-      ${on ? '' : '<div class="ladvice">지금은 <b>새로 사지 않고 현금으로 기다리는</b> 때예요. 아래 종목은 신호가 켜지면 살 후보로만 보세요.</div>'}
+      ${on ? '' : '<div class="ladvice">지금은 <b>새로 사지 않고 현금으로 기다리는</b> 때예요. 아래 종목은 시장 폭이 45%를 넘으면 살 후보로만 보세요.</div>'}
+      <div class="nextchk">다음 점검 <b>${d8(C.next)}</b> 장 마감 뒤 → 다음날 시가 주문 ${C.is_check_day ? '<span class="tag t-on">오늘 점검일</span>' : ''}</div>
       ${breadthSpark(B.hist, th)}</div>
-    <h2>이번 주 주도 업종 Top 3</h2><div class="meta hint">업종 점수 = 거래대금 비중이 꾸준히 늘었나 + 60일 수익이 시장보다 좋은가 + 52주 고점 근처 종목이 많은가. 지난주 점검일(${d8(D.prev_check)})에도 3위 안이었던 업종만 자격이 있어요. 공식 점검은 <b>월요일 장 마감 뒤</b> 값이에요.</div>
-    <div class="card">${secs}${rest ? `<div class="meta" style="margin-top:6px">그다음: ${rest}</div>` : ''}</div>
-    <h2>후보 종목 (${D.picks.length}/9칸${slots ? ` · 빈 ${slots}칸은 현금` : ''})</h2>
-    <div class="meta hint">자격 업종마다 20일선 위 · 52주 고점 10% 안 종목을 고점에 가까운 순으로 최대 3개. 한 칸 = 투자금의 1/9.</div>
-    ${picks}${exc}${nxt}
-    ${checklist()}${realBox()}
+    ${slotsView()}
+    <h2>주도 업종 순위 Top 10</h2><div class="meta hint">업종 점수(10점) = 돈 유입 지속 + 60일 강도 + 고점 근처 비율 (각 3.3점). 이번 주와 지난주 같은 요일(${d8(D.prev_check)}) 모두 3위 안인 업종만 자격. 각 업종 1·2등 종목과 종목 점수(10점)를 같이 보여 줘요. 점수를 누르면 구성.</div>
+    ${foldAllBar()}${(D.sectors || []).map(secCard).join('')}
+    <h2>지금 5칸 후보 (${D.picks.length}/5${D.picks.length < 5 ? ` · 빈 ${5 - D.picks.length}칸은 현금` : ''})</h2>
+    <div class="meta hint">자격 업종마다 20일선 위 · 52주 고점 10% 안 종목을 고점에 가까운 순으로 줄 세워 1등 먼저, 그다음 2등… 한 칸 = 투자금의 1/5. 실제 주문은 점검일 기준이에요.</div>
+    ${picks}${exc}
+    ${checklist()}${realBox()}${replayView()}
     <div class="meta hint">데이터: 네이버 금융 일봉(수정주가), 관리종목은 KRX KIND 목록${D.admin_ok ? '' : ' (오늘은 확인 실패 → 직접 확인하세요)'} · 계산 ${kst(D.made)} · 검사 ${fmt(D.stocks)}종목</div>
     ${discLine()}`;
 }
@@ -661,10 +750,10 @@ function viewHelp() {
   <h2>📈 이 앱의 방법은 하나: 주도주 로테이션</h2>
   <div class="card">${methodHTML()}</div>
   <div class="card"><b>갱신</b><ul class="why"><li>시세(현재가·등락)는 평일 08:50~15:50 약 10분마다 갱신돼요.</li>
-    <li>주도주 점수·신호·시장 폭은 <b>장 마감 뒤 하루 한 번</b> 계산해요 (화면 위 '몇 월 며칠 장 마감 기준' 표시). 장중 가격이 움직여도 점수는 다음 계산 때 바뀌어요.</li>
+    <li>주도주 점수·업종 순위·시장 폭·가상 5칸 계좌는 <b>장 마감 뒤 하루 한 번</b> 계산해요 (화면 위 '몇 월 며칠 장 마감 기준' 표시). 장중 가격이 움직여도 점수는 다음 계산 때 바뀌어요.</li>
     <li>앱은 1분마다 새 데이터를 확인해요. 초 단위 실시간 시세는 아니에요.</li></ul></div>
   <div class="card"><b>내 종목 저장</b><ul class="why"><li>관심·보유 종목, 평단·수량은 이 폰에만 저장되고 어디에도 올라가지 않아요. 앱 데이터를 지우면 사라져요.</li>
-    <li>평단을 넣으면 보유 카드에 손절선(평단 × 0.85)과 규칙에 따른 보유 유지·매도 안내가 나와요.</li></ul></div>`;
+    <li>평단을 넣으면 보유 카드에 손절선(평단 × 0.80), +30% 절반 익절 선(평단 × 1.30), 유지 조건 안내가 나와요. '절반 익절함' 표시도 이 폰에만 저장돼요.</li><li>가상 5칸 계좌는 서버가 규칙대로 계산한 <b>공용 연습 계좌</b>예요. 내 보유 종목과는 상관없고, 내 정보는 서버로 가지 않아요. 공유는 앱 주소만 (#setup= 링크는 공유하지 마세요).</li></ul></div>`;
 }
 
 let FLASH = '';
@@ -739,9 +828,10 @@ document.addEventListener('click', e => {
     if (c.h.includes(code)) { if (!confirm('보유 종목에서 삭제할까요?')) return; c.h = c.h.filter(x => x !== code); delete c.pos[code]; }
     else c.h = [...c.h, code];
   }
+  if (t.dataset.act === 'half') { const p = c.pos[code]; if (p) { p.half = !p.half; } saveCfg(c); render({ full: true }); return; }
   if (t.dataset.act === 'pos') {
     const a = Number($('#pa-' + code).value.replace(/,/g, '')), q = Number($('#pq-' + code).value.replace(/,/g, ''));
-    if (a > 0) c.pos[code] = { a, q: q > 0 ? q : 0 }; else delete c.pos[code];
+    if (a > 0) c.pos[code] = { a, q: q > 0 ? q : 0, half: !!(c.pos[code] && c.pos[code].a === a && c.pos[code].half) }; else delete c.pos[code];
     OPEN.delete('pos-' + code);
   }
   saveCfg(c); render({ full: true });
@@ -753,7 +843,7 @@ async function load(manual) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json(); const changed = !DATA || d.updated !== DATA.updated; DATA = d;
     let lchg = false;
-    if (changed || !LEAD || Date.now() - LEAD_AT > 15 * 60e3) { const old = LEAD && LEAD.made; await loadLead(); lchg = !!LEAD && LEAD.made !== old; }
+    if (changed || !LEAD || Date.now() - LEAD_AT > 15 * 60e3) { const old = LEAD && LEAD.made; await loadLead(); lchg = !!LEAD && LEAD.made !== old; if (lchg || !SLOTS) await loadSlots(); }
     if (changed || !ALL_UPD) {
       try { const a = await (await fetch('all.json?t=' + Date.now(), { cache: 'no-store' })).json(); ALL = a.s || {}; ALL_UPD = a.updated; } catch {}
     }

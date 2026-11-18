@@ -95,6 +95,15 @@ jobs:
         with:
           path: cache/leaders.json
           key: leaders-${{ github.run_id }}
+      # 가상 5칸 계좌 상태는 저장소(data/slots.json)에 커밋해 기록이 쌓이게
+      - name: save slots
+        if: steps.leaders.outputs.slots_changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- data/slots.json || [ -n "$(git status --porcelain data/slots.json)" ]; then
+            git add data/slots.json && git commit -m "slots: 가상 5칸 계좌 $(TZ=Asia/Seoul date +%Y-%m-%d)" && (git push || (git pull --rebase -X theirs && git push)) || true
+          fi
       # 하루 1번 작은 기록만 커밋 (스케줄이 60일 무활동으로 꺼지지 않게)
       - name: daily heartbeat
         if: steps.fetch.outputs.daily_full == 'true' && github.event_name == 'schedule'
@@ -105,7 +114,7 @@ jobs:
           git add status/last_daily.txt && git commit -m "status: daily refresh" && git push || true
       - name: site
         if: steps.fetch.outputs.ran == 'true'
-        run: mkdir -p _site && cp -r index.html version.js app.js style.css sw.js manifest.webmanifest data.json all.json icons logos _site/ && (cp info.json _site/ || true) && (cp cache/leaders.json _site/leaders.json || true) && touch _site/.nojekyll
+        run: mkdir -p _site && cp -r index.html version.js app.js style.css sw.js manifest.webmanifest data.json all.json icons logos _site/ && (cp info.json _site/ || true) && (cp cache/leaders.json _site/leaders.json || true) && (cp data/slots.json _site/slots.json || true) && (cp replay.json _site/ || true) && touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         if: steps.fetch.outputs.ran == 'true'
         with:

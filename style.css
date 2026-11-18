@@ -292,3 +292,21 @@ html[data-theme=light] .sk::after{background:linear-gradient(90deg,transparent,r
 .hadv.s-g{background:rgba(47,202,115,.13)}.hadv.s-r{background:rgba(255,93,104,.12)}.hadv.s-y{background:rgba(242,183,5,.13)}
 .idxline{margin:0 4px 10px}
 .fstate.s-g{color:var(--g)}.fstate.s-y{color:var(--y)}.fstate.s-r{color:var(--r)}.fstate.s-n{color:var(--mut)}
+/* v2.1 가상 5칸 계좌 · 업종 순위 */
+.nextchk{margin-top:8px;font-size:14.5px;background:var(--card2);border-radius:10px;padding:8px 10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.acct .lbig2,.slot .lbig2{font-size:24px;font-weight:800;letter-spacing:-0.02em;margin:2px 0 4px}
+.slot .lbig2{font-size:20px}
+.slot.empty{opacity:.75;border-style:dashed}.slot.empty b{display:flex;align-items:center;gap:8px;color:var(--mut)}
+.slotno,.secrk{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;border-radius:8px;background:var(--card2);font-size:13px;font-weight:800;margin-right:6px;color:var(--tx)}
+.eqc{width:100%;height:110px;margin-top:10px;display:block}
+.eqc .la{fill:none;stroke:var(--acc);stroke-width:2.4;vector-effect:non-scaling-stroke}.eqc .lk{fill:none;stroke:var(--mut);stroke-width:1.6;vector-effect:non-scaling-stroke}
+.eqc .th{stroke:var(--line);stroke-dasharray:4 4;stroke-width:1;vector-effect:non-scaling-stroke}.eqc .pa{fill:var(--acc)}
+.lg{display:inline-block;width:12px;height:3px;border-radius:2px;vertical-align:middle;margin:0 4px 0 6px}.lg.la{background:var(--acc)}.lg.lk{background:var(--mut)}
+.htab td,.htab th{font-size:12.5px;padding:5px 4px}
+.lgrid.g3{grid-template-columns:1fr 1fr 1fr}
+.replay .fhead{width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:0;color:inherit;padding:0;font:inherit;cursor:pointer}
+.seccard .row>b{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.chg{font-size:12px;font-weight:800;border-radius:6px;padding:1px 6px;background:var(--card2);color:var(--mut)}.chg.up{color:var(--r)}.chg.dn{color:var(--acc)}.chg.new{color:var(--y)}
+.secstks{margin:8px 0 2px;display:flex;flex-direction:column;gap:6px}
+.secstk{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;background:var(--card2);border-radius:10px;padding:6px 9px}
+.lsc.sm{font-size:16px;padding:2px 8px;background:var(--card)}.lsc.sm small{font-size:11px}

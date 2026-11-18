@@ -19,7 +19,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(caches.open('mf-logos').then(c => c.match(req).then(hit => hit || fetch(req).then(r => { if (r.ok) c.put(req, r.clone()); return r; }))));
     return;
   }
-  const key = isNav ? 'index.html' : (u.pathname.endsWith('data.json') ? 'data.json' : u.pathname.endsWith('all.json') ? 'all.json' : u.pathname.endsWith('leaders.json') ? 'leaders.json' : req);
+  const key = isNav ? 'index.html' : (u.pathname.endsWith('data.json') ? 'data.json' : u.pathname.endsWith('all.json') ? 'all.json' : u.pathname.endsWith('leaders.json') ? 'leaders.json' : u.pathname.endsWith('slots.json') ? 'slots.json' : u.pathname.endsWith('replay.json') ? 'replay.json' : req);
   // 화면 문서는 주소만으로 새로 요청 (navigate 요청을 그대로 다시 쓰면 오래된 화면이 남는 문제 방지)
   const net = isNav ? fetch(u.origin + u.pathname, { cache: 'no-store', credentials: 'same-origin' }) : fetch(req.url, { cache: 'no-store' });
   e.respondWith(net.then(r => {
