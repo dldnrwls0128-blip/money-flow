@@ -212,6 +212,7 @@ nav button.on span{color:var(--tx)}
 .whyline{background:var(--acc-soft);border:0;border-radius:12px;color:var(--tx);font-size:14px}
 .tag{background:var(--card2);border-radius:8px}
 .zb{background:rgba(49,130,246,.16);color:var(--dn)}.zg{background:rgba(47,202,115,.15);color:var(--g)}.zr{background:rgba(255,93,104,.14);color:var(--r)}
+.zrr{background:rgba(167,139,250,.16);color:#a78bfa}
 .instcard{background:linear-gradient(135deg,rgba(49,130,246,.18),var(--card));border-color:rgba(49,130,246,.35)}
 .newver{background:var(--acc);border-radius:14px}
 .warnbox{background:rgba(242,183,5,.10);border-color:rgba(242,183,5,.35)}

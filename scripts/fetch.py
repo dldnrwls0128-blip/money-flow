@@ -61,15 +61,22 @@ def stock_daily(code):
         return None
     tv20 = [r[4] * r[5] for r in hist[-20:]]
     y1 = [r for r in full[-250:] if r[2] > 0 and r[3] > 0] or hist   # 52주 = 최근 약 250거래일 (거래정지 0값 제외)
+    # v1.9: ATR(14일 평균 하루 변동폭), 최근 4거래일 중 거래대금이 그 전 20일 평균보다 많았던 날 수
+    ok = [r for r in full if r[2] > 0 and r[3] > 0 and r[4] > 0]   # 거래정지(0값) 날 제외
+    trs = [max(ok[i][2], ok[i - 1][4]) - min(ok[i][3], ok[i - 1][4]) for i in range(max(1, len(ok) - 14), len(ok))]
+    atr = sum(trs) / len(trs) if len(trs) >= 10 else None
+    tvs = [r[4] * r[5] for r in full]
+    up4 = sum(1 for i in range(len(tvs) - 4, len(tvs)) if i >= 20 and tvs[i] > sum(tvs[i - 20:i]) / 20)
     cl = [r[4] for r in full[-21:]]
     ch = [(cl[i] / cl[i - 1] - 1) * 100 for i in range(1, len(cl)) if cl[i - 1] > 0]
     vol20 = (sum((x - sum(ch) / len(ch)) ** 2 for x in ch) / (len(ch) - 1)) ** 0.5 if len(ch) >= 10 else None
     return {"flows": flows, "hi60": max(r[2] for r in hist), "lo60": min(r[3] for r in hist),
             "vol20": round(vol20, 3) if vol20 is not None else None, "hi19": max(r[2] for r in full[-19:]),
+            "atr": round(atr, 4) if atr else None, "up4": up4,
             "hi52": max(r[2] for r in y1), "lo52": min(r[3] for r in y1),
             "hi52d": max(y1, key=lambda r: r[2])[0], "lo52d": min(y1, key=lambda r: r[3])[0],
             "avgtv20": sum(tv20) / len(tv20), "last": hist[-1][0],
-            "sr": sr_from_rows([(r[0], r[2], r[3]) for r in full])}
+            "sr": sr_from_rows([(r[0], r[2], r[3]) for r in ok])}
 
 def _md(d):
     y = dt.datetime.now(KST).year
@@ -202,45 +209,67 @@ def score_parts(flows, tv_today, avgtv20, frac, chg, mkt_chg, price, lo60, hi60,
     pt = [round(s_sup, 1), round(s_val, 1), round(s_per, 1), round(s_cat, 1), round(s_pos, 1)]
     return round(sum([s_sup, s_val, s_per, s_cat, s_pos]), 1), pt, f
 
-NEW_PARTS = (("수급", 3), ("거래대금", 2), ("안정성", 2), ("추세", 2), ("과열 아님", 1))
-def score_new(flows, tv_today, avgtv20, frac, chg, price, vol20, hi19):
-    """v1.8 점수 (2023.11~2026.11 백테스트로 고름, scripts/research/)
-    수급 3: 최근 20거래일 외국인+기관 순매수 ÷ 거래량 (0% 이하 0점, 6% 이상 만점)
-    거래대금 2: 오늘 거래대금 속도가 평소(20일 평균)의 0.7~2.2배면 만점, 0.5~0.7·2.2~3.5배 1점, 그 밖 0점
+NEW_PARTS = (("거래 꾸준", 2), ("외국인·기관", 2), ("오늘 거래대금", 2), ("안정성", 2), ("추세", 1), ("과열 아님", 1))
+def score_new(flows, tv_today, avgtv20, frac, chg, price, vol20, hi19, up4=None):
+    """v1.9 점수 (2023.11~2026.11 매매 시뮬레이션의 기대수익으로 고름, scripts/research/)
+    거래 꾸준 2: 최근 5거래일(오늘 포함) 중 거래대금이 평소(그 전 20일 평균)보다 많았던 날 수 ÷ 5
+    외국인·기관 2: 최근 20거래일 외국인+기관 순매수 ÷ 거래량 (0% 이하 0점, 6% 이상 만점)
+    오늘 거래대금 2: 평소의 0.7~2.2배 만점, 0.5~0.7·2.2~3.5배 1점, 그 밖 0점
     안정성 2: 최근 20일 하루 등락률 표준편차 2% 이하 만점, 5% 이상 0점
-    추세 2: 20일 고점 대비 −5% 이내 만점, −20% 이하 0점
+    추세 1: 20일 고점 대비 −5% 이내 만점, −20% 이하 0점
     과열 아님 1: 오늘 +8% 넘게 급등했거나 거래대금이 평소 3.5배 넘으면 0점"""
     f = {}
     fl = flows[:20] if flows else []
     v = sum(x["v"] for x in fl)
     if fl and v:
         r20 = sum(x["f"] + x["o"] for x in fl) / v
-        s_sup = clamp(r20 / 0.06, 0, 1) * 3; f["f20"] = round(r20 * 100, 1); f["n20"] = len(fl)
+        s_sup = clamp(r20 / 0.06, 0, 1) * 2; f["f20"] = round(r20 * 100, 1); f["n20"] = len(fl)
         f["pd20"] = sum(1 for x in fl if x["f"] + x["o"] > 0)
     else:
         s_sup = 0.0
     pace = tv_today / (avgtv20 * frac) if avgtv20 and tv_today is not None else None
+    if up4 is not None:
+        days = up4 + (1 if (pace or 0) > 1 else 0); s_days = days / 5 * 2; f["up5"] = days
+    else:
+        s_days = 1.0
     s_tv = 0 if pace is None else 2 if 0.7 <= pace <= 2.2 else 1 if 0.5 <= pace <= 3.5 else 0
     s_vol = clamp((5 - vol20) / 3, 0, 1) * 2 if vol20 is not None else 1.0
     if vol20 is not None: f["vol"] = round(vol20, 1)
     if price and hi19:
-        dh = price / max(hi19, price) - 1; s_tr = clamp((dh + 0.2) / 0.15, 0, 1) * 2; f["dh"] = round(dh * 100, 1)
+        dh = price / max(hi19, price) - 1; s_tr = clamp((dh + 0.2) / 0.15, 0, 1); f["dh"] = round(dh * 100, 1)
     else:
-        s_tr = 1.0
+        s_tr = 0.5
     hot = (chg or 0) > 8 or (pace or 0) > 3.5
     f["hot"] = 1 if hot else 0
     f["tvok"] = 1 if s_tv == 2 else 0
-    pt = [round(s_sup, 1), round(s_tv, 1), round(s_vol, 1), round(s_tr, 1), 0.0 if hot else 1.0]
+    pt = [round(s_days, 1), round(s_sup, 1), round(s_tv, 1), round(s_vol, 1), round(s_tr, 1), 0.0 if hot else 1.0]
     return round(sum(pt), 1), pt, f
+
+def plan19(lv, atr):
+    """v1.9 매매 계획: 1차 매수=지지선(기존 매수 구간 위쪽), 2차 매수=1차−ATR, 손절=2차 매수가 아래 지지선 바로 밑(최소 −3%·최대 −10%),
+    1차 매도=평균 매수가+손절폭×2, 2차 매도=+손절폭×4. 백테스트(20거래일 보유, 1차 매도 뒤 손절을 본전으로)로 고름."""
+    if not lv or not atr: return lv
+    b1 = lv["buy1"]; b2 = b1 - atr
+    if b2 <= 0 or b2 >= b1: return lv
+    st0 = lv.get("stop"); lo, hi = b2 * 0.90, b2 * 0.97
+    if st0 and lo <= st0 <= hi: st, sw = st0, lv.get("stop_why", "")
+    elif st0 and st0 > hi: st, sw = hi, "지지선이 2차 매수가에 너무 가까워 2차 매수가 −3%"
+    else: st, sw = lo, "아래 지지선이 너무 멀어 2차 매수가 −10%"
+    avg = (b1 + b2) / 2; R = avg - st
+    s1 = max(avg + 2 * R, b1 * 1.01); s2 = max(avg + 4 * R, s1 * 1.01)
+    out = {"buy1": b1, "buy1_why": lv.get("buy1_why"), "nosup": lv.get("nosup"), "buy2": b2, "buy2_why": f"1차 매수가 − 하루 평균 변동폭(ATR 14일) {atr:,.0f}",
+           "stop": st, "stop_why": sw, "sell1": s1, "sell1_why": "평균 매수가 + 손절폭×2 (손익비 1:2, 여기서 절반 팔고 손절을 본전으로)",
+           "sell2": s2, "sell2_why": "평균 매수가 + 손절폭×4 (손익비 1:4, 나머지 절반)"}
+    return out
 
 def lv_compact(lv):
     if not lv: return None
     return [lv.get(k) for k in ("buy1", "buy2", "stop", "sell1", "sell2")], [lv.get(k + "_why") for k in ("buy1", "buy2", "stop", "sell1", "sell2")]
 
-LEVEL_RULE = ("매수 구간: 위쪽=최근 10일 저점(이미 깨졌으면 그 아래 가장 가까운 일봉 저점), 아래쪽=그보다 3% 이상 낮은 일봉 저점. "
-              "손절선=매수 구간 아래쪽보다 3.5% 이상 낮은 실제 일봉 저점 바로 밑. "
-              "매도 구간: 아래쪽=매수 구간 위쪽보다 4% 이상·현재가 이상인 가장 가까운 고점, 위쪽=그보다 4% 이상 높은 다음 고점(60일·52주 고점 포함). "
-              "52주 저점까지 깨져 아래 지지선이 없으면(신저가) 매수 구간=현재가~−3%, 손절선=그 아래 −4%로 두고 '반등 확인 뒤 매수'로 표시. 수익률은 매수 구간 위쪽 가격 기준.")
+LEVEL_RULE = ("국내 종목(v1.9): 1차 매수=최근 10일 저점(이미 깨졌으면 그 아래 가장 가까운 일봉 저점), 2차 매수=1차 매수가 − 하루 평균 변동폭(ATR 14일). "
+              "손절선=2차 매수가 아래 가장 가까운 일봉 저점 바로 밑, 단 2차 매수가보다 최소 3%·최대 10% 아래. "
+              "1차 매도=평균 매수가 + (평균 매수가 − 손절선)×2 → 절반 팔고 손절선을 본전으로 올림, 2차 매도=평균 매수가 + 손절폭×4, 20거래일이 지나면 남은 물량 정리. "
+              "해외 종목은 예전 방식(실제 고점·저점)을 그대로 써요. 52주 저점까지 깨져 아래 지지선이 없으면(신저가) 1차 매수=현재가로 두고 '반등 확인 뒤 매수'로 표시.")
 
 def all_quotes():
     out = {}
@@ -309,12 +338,12 @@ def main():
     cpath = os.path.join(ROOT, "cache", "daily.json")
     cache = json.load(open(cpath, encoding="utf-8")) if os.path.exists(cpath) else {}
     today = now.strftime("%Y%m%d")
-    full = force or cache.get("v") != 5 or (hm >= 1750 and cache.get("key") != today)
+    full = force or cache.get("v") != 6 or (hm >= 1750 and cache.get("key") != today)
     changed = False
     if full:
         codes = sorted(set(quotes) | set(core))
         print("일별 데이터 전 종목 새로 받는 중:", len(codes)); t0 = time.time()
-        cache = {"v": 5, "key": today if hm >= 1750 else "day-" + today, "made": now.isoformat(timespec="minutes"), "stocks": build_daily(codes)}
+        cache = {"v": 6, "key": today if hm >= 1750 else "day-" + today, "made": now.isoformat(timespec="minutes"), "stocks": build_daily(codes)}
         print("일별 완료", round(time.time() - t0), "초", len(cache["stocks"])); changed = True
     else:
         miss = [c for c in core if c not in cache["stocks"]]
@@ -336,12 +365,12 @@ def main():
         if d:
             total, pt, f = score_parts(d["flows"], q["tv"], d["avgtv20"], frac, q["pct"], mkt_pct.get(q["mkt"]), q["price"],
                                        d["lo60"], d["hi60"], d.get("lo52"), d.get("hi52"))
-            s2, pt2, f2 = score_new(d["flows"], q["tv"], d["avgtv20"], frac, q["pct"], q["price"], d.get("vol20"), d.get("hi19"))
+            s2, pt2, f2 = score_new(d["flows"], q["tv"], d["avgtv20"], frac, q["pct"], q["price"], d.get("vol20"), d.get("hi19"), d.get("up4"))
             f.update(f2); f["rk"] = rank.get(c); f["tot"] = len(rank)
             r.update(s=s2, pt=pt2, f=f, a20=round(d["avgtv20"] / 1e8))
             if d.get("hi52d"): r["y52"] = [max(d["hi52"], q["price"] or 0), d["hi52d"], min(d["lo52"], q["price"] or d["lo52"]), d["lo52d"]]
             if PREF.search(q["name"]): r["pf"] = 1
-            lc = lv_compact(round_levels(levels(q["price"], d.get("sr"))))
+            lc = lv_compact(round_levels(plan19(levels(q["price"], d.get("sr")), d.get("atr"))))
             if lc: r["l"], r["lw"] = lc
         else:
             r["f"] = {"tv": round(q["tv"] / 1e8), "rk": rank.get(c), "tot": len(rank)}
