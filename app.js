@@ -77,36 +77,55 @@ const kst = iso => iso ? new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia
 function money(v, usd) { if (v == null) return '–'; return usd ? '$' + fmt(v, v < 10 ? 3 : 2) : fmt(v) + '원'; }
 
 // ---------- 점수 근거 ----------
-const PARTS = [['수급', 3], ['거래대금', 2], ['지속성', 2], ['촉매', 2], ['가격위치', 1]];
+const PARTS = [['수급', 3], ['거래대금', 2], ['안정성', 2], ['추세', 2], ['과열 아님', 1]];          // 종목 점수 (v1.8)
+const PARTS_SEC = [['수급', 3], ['거래대금', 2], ['지속성', 2], ['촉매', 2], ['가격위치', 1]];    // 업종 점수 (돈 흐름 중심, 그대로)
+const partsOf = sector => sector ? PARTS_SEC : PARTS;
 function explain(pt, f, sector) {
+  if (!sector) return explainStock(pt, f);
   f = f || {};
   const out = [];
   const g = (v, m) => v / m;
   // 수급
   let ev = f.fd ? `${md(f.fd)} ${sector ? '상위 5종목 합 ' : ''}외국인 ${eok(f.fo)} · 기관 ${eok(f.oo)}` + (f.r1 != null ? ` (거래량의 ${f.r1 > 0 ? '+' : ''}${f.r1}%)` : '') : '수급 데이터 없음 → 중간값';
-  out.push([PARTS[0], pt[0], ev, g(pt[0], 3) >= .7 ? '외국인·기관이 사고 있어요' : g(pt[0], 3) >= .45 ? '큰손 매매가 팽팽해요' : '외국인·기관이 팔고 있어요']);
+  out.push([PARTS_SEC[0], pt[0], ev, g(pt[0], 3) >= .7 ? '외국인·기관이 사고 있어요' : g(pt[0], 3) >= .45 ? '큰손 매매가 팽팽해요' : '외국인·기관이 팔고 있어요']);
   // 거래대금
   ev = `오늘 거래대금 ${fmt(f.tv)}억` + (f.rk ? ` · 전체 ${fmt(f.rk)}위/${fmt(f.tot)}` : '') + (f.pace != null ? ` · 평소(20일 평균) 대비 ${f.pace}배 속도` : '');
-  out.push([PARTS[1], pt[1], ev, f.pace >= 1.5 ? '평소보다 돈이 훨씬 많이 몰려요' : f.pace >= 0.8 ? '평소 수준으로 거래돼요' : '평소보다 관심이 적어요']);
+  out.push([PARTS_SEC[1], pt[1], ev, f.pace >= 1.5 ? '평소보다 돈이 훨씬 많이 몰려요' : f.pace >= 0.8 ? '평소 수준으로 거래돼요' : '평소보다 관심이 적어요']);
   // 지속성
   ev = f.n ? `최근 ${f.n}일 중 ${f.pd}일 외국인+기관 순매수` + (f.sk ? ` · ${Math.abs(f.sk)}일 연속 순${f.sk > 0 ? '매수' : '매도'}` : '') : '데이터 없음 → 중간값';
-  out.push([PARTS[2], pt[2], ev, f.sk >= 3 ? '며칠째 꾸준히 사들이고 있어요' : f.sk <= -3 ? '며칠째 계속 팔고 있어요' : '사고팔기가 섞여 있어요']);
+  out.push([PARTS_SEC[2], pt[2], ev, f.sk >= 3 ? '며칠째 꾸준히 사들이고 있어요' : f.sk <= -3 ? '며칠째 계속 팔고 있어요' : '사고팔기가 섞여 있어요']);
   // 촉매
   ev = `시장 대비 오늘 ${f.rel > 0 ? '+' : ''}${f.rel ?? 0}%p` + (f.br != null ? ` · 업종 안 오른 종목 ${f.br}%` : '') + ' (뉴스 대신 강도로 근사)';
-  out.push([PARTS[3], pt[3], ev, f.rel >= 1.5 ? '오늘 시장보다 확실히 강해요' : f.rel <= -1.5 ? '오늘 시장보다 약해요' : '시장과 비슷하게 움직여요']);
+  out.push([PARTS_SEC[3], pt[3], ev, f.rel >= 1.5 ? '오늘 시장보다 확실히 강해요' : f.rel <= -1.5 ? '오늘 시장보다 약해요' : '시장과 비슷하게 움직여요']);
   // 가격위치
   ev = (f.p60 != null ? `60일 범위 중 ${f.p60}%` : '60일 범위 없음') + (f.p52 != null ? ` · 52주 범위 중 ${f.p52}% 위치` : '');
-  out.push([PARTS[4], pt[4], ev, f.p60 == null ? '' : f.p60 <= 25 ? '바닥권이라 저점 매수에 유리해요' : f.p60 >= 75 ? '고점권이라 따라 사기는 주의' : '중간 위치예요']);
+  out.push([PARTS_SEC[4], pt[4], ev, f.p60 == null ? '' : f.p60 <= 25 ? '바닥권이라 저점 매수에 유리해요' : f.p60 >= 75 ? '고점권이라 따라 사기는 주의' : '중간 위치예요']);
+  return out;
+}
+function explainStock(pt, f) {
+  f = f || {}; const out = [], pc = v => (v > 0 ? '+' : '') + v;
+  let ev = f.n20 ? `최근 ${f.n20}거래일 외국인+기관 순매수 = 거래량의 ${pc(f.f20)}% (순매수한 날 ${f.pd20}일)` : '수급 데이터 없음 → 0점';
+  if (f.fd) ev += ` · ${md(f.fd)} 외국인 ${eok(f.fo)} · 기관 ${eok(f.oo)}`;
+  out.push([PARTS[0], pt[0], ev, f.f20 >= 4 ? '외국인·기관이 꾸준히 모으고 있어요' : f.f20 > 0 ? '외국인·기관이 조금씩 사고 있어요' : '외국인·기관이 사지 않고 있어요']);
+  ev = `오늘 거래대금 ${fmt(f.tv)}억` + (f.rk ? ` · 전체 ${fmt(f.rk)}위/${fmt(f.tot)}` : '') + (f.pace != null ? ` · 평소(20일 평균) 대비 ${f.pace}배 속도` : '') + ' · 0.7~2.2배가 만점';
+  out.push([PARTS[1], pt[1], ev, f.pace == null ? '' : f.pace > 3.5 ? '거래가 너무 폭발했어요 (과열 주의)' : f.pace > 2.2 ? '평소보다 많이 몰렸어요 (조금 과열)' : f.pace >= 0.7 ? '적당히 활기 있게 거래돼요' : '거래가 말라 있어요']);
+  ev = f.vol != null ? `최근 20일 하루 등락 폭(표준편차) ${f.vol}% · 2% 이하 만점, 5% 이상 0점` : '데이터 없음 → 중간값';
+  out.push([PARTS[2], pt[2], ev, f.vol == null ? '' : f.vol <= 2.5 ? '주가가 차분하게 움직여요' : f.vol <= 4 ? '보통 수준으로 출렁여요' : '많이 출렁이는 종목이에요']);
+  ev = f.dh != null ? `20일 고점 대비 ${f.dh}% · −5% 이내 만점, −20% 이하 0점` : '데이터 없음 → 중간값';
+  out.push([PARTS[3], pt[3], ev, f.dh == null ? '' : f.dh >= -5 ? '최근 고점 근처를 지키고 있어요' : f.dh >= -12 ? '고점에서 조금 쉬어 가는 중이에요' : '고점에서 많이 밀렸어요']);
+  ev = `오늘 ${pc(f.rel != null ? +(f.rel).toFixed(2) : 0)}%p(시장 대비)` + (f.pace != null ? ` · 거래대금 ${f.pace}배` : '') + ' · 하루 +8% 넘는 급등이나 거래대금 3.5배 넘으면 0점';
+  out.push([PARTS[4], pt[4], ev, f.hot ? '오늘 너무 달아올랐어요 → 따라 사기 주의' : '급등·거래 폭발 없이 차분해요']);
   return out;
 }
 function detailHTML(id, r, sector) {
+  const P_ = partsOf(sector);
   if (!r.pt) return `<div class="meta" style="margin-top:8px">아직 점수용 일별 데이터가 없어요 (장 마감 후 갱신 때 채워져요).</div>`;
   const tot = r.pt.reduce((x, y) => x + y, 0) || 1, CC = ['#3182f6', '#2fca73', '#a78bfa', '#f2b705', '#ff7a59'];
   const top = r.pt.length ? r.pt.indexOf(Math.max(...r.pt)) : -1;
   const contrib = `<div class="contrib"><div class="row"><b>점수 구성</b><button class="linkbtn" data-act="weights">ⓘ 점수 기준</button></div>
-    <div class="cstack">${r.pt.map((v, i) => `<i style="width:${v * 10}%;background:${CC[i]}" data-tip="${PARTS[i][0]} ${v}점 (총점의 ${Math.round(v / tot * 100)}%)"></i>`).join('')}</div>
-    <div class="clegend">${r.pt.map((v, i) => `<span${i === top ? ' class="ctop"' : ''}><span class="dot" style="background:${CC[i]}"></span>${PARTS[i][0]} <b>${v}</b></span>`).join('')}</div>
-    <div class="meta">막대 길이 = 각 항목이 10점 중 차지한 점수 · ${top >= 0 ? `점수를 가장 많이 끌어올린 항목: <b>${PARTS[top][0]} ${r.pt[top]}점</b>` : ''}</div></div>`;
+    <div class="cstack">${r.pt.map((v, i) => `<i style="width:${v * 10}%;background:${CC[i]}" data-tip="${P_[i][0]} ${v}점 (총점의 ${Math.round(v / tot * 100)}%)"></i>`).join('')}</div>
+    <div class="clegend">${r.pt.map((v, i) => `<span${i === top ? ' class="ctop"' : ''}><span class="dot" style="background:${CC[i]}"></span>${P_[i][0]} <b>${v}</b></span>`).join('')}</div>
+    <div class="meta">막대 길이 = 각 항목이 10점 중 차지한 점수 · ${top >= 0 ? `점수를 가장 많이 끌어올린 항목: <b>${P_[top][0]} ${r.pt[top]}점</b>` : ''}</div></div>`;
   const rows = explain(r.pt, r.f, sector).map(([[k, m], v, ev, it]) => `
     <div class="ex"><div class="row"><b>${k} <span class="meta">배점 ${m}</span></b><b class="c-${lvl(v / m * 10)}">${v} / ${m} <span class="meta">(${Math.round(v / m * 100)}% × ${m}점 · 총점의 ${Math.round(v / tot * 100)}%)</span></b></div>
     <div class="pb"><i style="width:${v / m * 100}%;background:${COLOR[lvl(v / m * 10)]}"></i></div>
@@ -475,36 +494,44 @@ function firstDisclaimer() {
   m.addEventListener('click', e => { if (e.target === m) e.stopImmediatePropagation(); }, true);   // 바깥 눌러 닫기 막기
   m.querySelector('#discok').onclick = () => { localStorage.setItem('mf_disc', '1'); closeModal(); };
 }
-let ANALYSIS = null;
+let ANALYSIS = null, ANALYSIS_P = null;
+function loadAnalysis() {
+  return ANALYSIS_P || (ANALYSIS_P = fetch('analysis.json?v=' + (self.APP_VERSION || ''), { cache: 'no-store' }).then(r => r.json()).catch(() => ({})).then(j => (ANALYSIS = j)));
+}
+const pd8 = s => s ? `${s.slice(2, 4)}.${+s.slice(4, 6)}.${+s.slice(6, 8)}` : '';
 async function openWeights() {
-  if (!ANALYSIS) { try { ANALYSIS = await (await fetch('analysis.json', { cache: 'no-store' })).json(); } catch { ANALYSIS = {}; } }
-  const W = [['수급', 3, '#3182f6', '외국인·기관이 사고 있나', '전 거래일과 최근 3일 외국인+기관 순매수가 거래량에서 차지하는 비율', '네이버 투자자별 매매동향'],
-    ['거래대금', 2, '#2fca73', '평소보다 돈이 몰리나', '오늘 거래대금이 20일 평균보다 얼마나 빠르게 쌓이는지 (2배면 만점)', '네이버 시세·일봉'],
-    ['지속성', 2, '#a78bfa', '며칠째 꾸준한가', '최근 5거래일 중 외국인+기관 순매수였던 날 수', '네이버 투자자별 매매동향'],
-    ['촉매', 2, '#f2b705', '오늘 시장보다 강한가', '오늘 등락률 − 시장(코스피/코스닥) 등락률. 뉴스를 직접 읽지 않고 “강도”로 대신 재요 (업종은 오른 종목 비율도)', '네이버 시세·지수'],
-    ['가격 위치', 1, '#ff7a59', '싸게 살 자리인가', '최근 60거래일 고가~저가 중 지금 위치. 바닥에 가까울수록 높아요', '네이버 일봉']];
+  await loadAnalysis();
+  const W = [['수급', 3, '#3182f6', '돈이 들어오고 있나', '최근 20거래일 동안 외국인+기관이 순매수한 주식 수 ÷ 전체 거래량. 0% 이하면 0점, +6% 이상이면 만점', '네이버 투자자별 매매동향'],
+    ['거래대금', 2, '#2fca73', '적당히 활기 있나', '오늘 거래대금이 평소(20일 평균)의 몇 배 속도인지. 0.7~2.2배 만점 · 0.5~0.7배나 2.2~3.5배 1점 · 너무 한산하거나 폭발하면 0점', '네이버 시세·일봉'],
+    ['안정성', 2, '#a78bfa', '차분하게 움직이나', '최근 20일 하루 등락률의 표준편차. 2% 이하 만점, 5% 이상 0점', '네이버 일봉'],
+    ['추세', 2, '#f2b705', '최근 고점을 지키나', '지금 가격이 20일 고점보다 얼마나 낮은지. −5% 이내 만점, −20% 이하 0점', '네이버 일봉'],
+    ['과열 아님', 1, '#ff7a59', '오늘 너무 달아오르지 않았나', '오늘 +8% 넘게 급등했거나 거래대금이 평소 3.5배를 넘으면 0점 (지난 분석에서 이런 날 뒤엔 되돌림이 많았어요)', '네이버 시세']];
   const stack = W.map(([n, w, c]) => `<i style="width:${w * 10}%;background:${c}" title="${n} ${w}점"></i>`).join('');
   const rows = W.map(([n, w, c, q, how, src]) => `<div class="wrow"><div class="row"><b><span class="dot" style="background:${c}"></span>${n}</b><b>${w}점 <span class="meta">(${w * 10}%)</span></b></div>
     <div class="wbar"><i style="width:${w / 3 * 100}%;background:${c}"></i></div><div><b>${q}</b> — ${how}</div><div class="meta">자료: ${src}</div></div>`).join('');
   const A = ANALYSIS || {}; let an = '';
-  if (A.rows) {
-    const g = n => A.rows.find(r => r.n === n) || {};
-    const cur = g('현재(3·2·2·2·1)'), pos = g('가격위치만'), cat = g('촉매만'), val = g('거래대금만');
-    const p = s => `${s.slice(0, 4)}.${+s.slice(4, 6)}.${+s.slice(6, 8)}`;
-    an = `<h3>지난 1년 점수를 되짚어 봤어요</h3>
-    <div class="card inner"><div class="meta">${p(A.period[0])} ~ ${p(A.period[1])} · ${fmt(A.days)}거래일 · ${fmt(A.stocks)}종목 · 표본 ${fmt(A.obs)}개 · 매일 장 마감 점수 → 다음 5·10거래일 수익률</div>
-      <ul class="why"><li><b>총점과 이후 수익률의 관계는 거의 없었어요.</b> 순위 상관 5일 ${cur.ic5}, 10일 ${cur.ic10} (0이면 무관, ±1이면 완전 일치).</li>
-        <li>점수 상위 20% 종목의 5일 뒤 상승 비율 ${cur.hit5}% · 전체 평균 ${A.base_up['5일']}%와 비슷했어요.</li>
-        <li>항목별로는 <b>가격 위치</b>(싸게 살 자리)가 조금 플러스(${pos.ic5}), <b>촉매</b>(오늘 강세)는 조금 마이너스(${cat.ic5}) — 오늘 많이 오른 종목은 며칠 뒤 되돌림이 있었다는 뜻이에요. 거래대금 ${val.ic5}.</li>
-        <li>가중치를 바꿔도(수급 4·가격 0, 모두 같게 등) 뚜렷하게 나아지지 않아서 <b>지금 배점은 그대로</b> 두었어요.</li></ul>
-      <div class="disc">과거 결과가 미래 수익을 보장하지 않아요. 1년·하락장 위주 표본이고, 지금 거래가 많은 종목만 봐서(생존 편향) 한계가 있어요.</div></div>`;
+  if (A.v === 2) {
+    const R = A.rule['7'], O = A.old, B = A.base, Z = A.zone;
+    const sg = v => (v > 0 ? '+' : '') + v + '%p', row = (lab, x, y, b) => `<tr><td>${lab}</td><td>${y.h10}%</td><td>${b ? '기준' : sg(y.ex10)}</td><td>${b ? '기준' : sg(x.ex10)}</td></tr>`;
+    an = `<h3>얼마나 잘 맞았나 (과거 검증)</h3>
+    <div class="card inner"><div class="meta">${pd8(A.period[0])}~${pd8(A.period[1])} · ${fmt(A.stocks)}종목 · ${fmt(A.days)}거래일 · 표본 ${fmt(A.obs)}개. 앞 2/3(${pd8(A.train[0])}~${pd8(A.train[1])})로 규칙을 고르고, <b>뒤 1/3(${pd8(A.test[0])}~${pd8(A.test[1])})은 고를 때 보지 않고 확인만</b> 했어요. 장 마감 가격에 샀다고 가정.</div>
+      <table class="atab"><tr><th>10거래일 뒤</th><th>확인 기간 상승 비율</th><th>같은 날 전체 대비 (확인)</th><th>(고른 기간)</th></tr>
+        ${row('전체 종목 평균', B.tr, B.te, 1)}${row('예전 🎯 (옛 점수 6.5↑+매수 구간)', O.tr, O.te)}${row('<b>새 🎯 (새 점수 7↑+매수 구간+조건)</b>', R.tr, R.te)}</table>
+      <ul class="why"><li>확인 기간에 새 🎯는 <b>${R.te.h10}%</b>가 10일 뒤 올랐어요 (전체 ${B.te.h10}%). 같은 날 전체 종목보다 <b>+${R.te.ex10}%p</b> 높았어요. 예전 방식은 확인 기간에 +${O.te.ex10}%p로 효과가 사라졌어요.</li>
+        <li>5일 뒤 오른 비율 ${R.te.h5}% (전체 ${B.te.h5}%) · 10일 평균 수익률 ${R.te.y10 > 0 ? '+' : ''}${R.te.y10}% (전체 ${B.te.y10 > 0 ? '+' : ''}${B.te.y10}%)</li>
+        <li>산 뒤 20거래일 안에 1차 매도가에 먼저 닿음 <b>${R.te.tgt}%</b> · 손절선에 먼저 닿음 ${R.te.stop}% (매수 구간 전체는 ${Z.te.tgt}% · ${Z.te.stop}%)</li>
+        <li>반기별로 나눠 봐도 6번 모두 전체보다 높았어요 (+${Math.min(...A.halves.map(h => h[4]))}~+${Math.max(...A.halves.map(h => h[4]))}%p). 다만 확인 기간만 놓고 보면 통계적으로 확실하다고 하기엔 표본이 적어요.</li>
+        <li>수급은 “돈이 모이는 종목”을 찾으려고 가장 큰 배점으로 두었지만, 상승 확률을 높이는 힘은 거래대금·안정성·과열 피하기가 더 컸어요. 오늘 급등(옛 ‘촉매’)은 오히려 마이너스라 뺐어요.</li>
+        <li>시장(코스피 20일선 아래·위)에 따라 나눠 보면 일관된 차이가 없어서 “시장 약하면 승률 낮음” 경고는 넣지 않았어요.</li></ul>
+      <div class="disc">과거 결과가 미래 수익을 보장하지 않아요. 지금 상장된 종목만 봐서(생존 편향) 실제보다 좋게 나왔을 수 있고, 약 3년·한 시장·장 마감 매수 가정이며 수수료·세금은 빼지 않았어요. 10번 중 5번 정도는 여전히 떨어져요.</div></div>`;
   }
   const m = modal(`<div class="sheet-h"><b>점수는 이렇게 매겨요</b><button class="mini" id="mcancel">닫기</button></div>
-    <div class="meta">5가지 항목 점수를 더해 10점 만점이에요. 각 항목은 0%~100%로 채점한 뒤 배점을 곱해요.</div>
+    <div class="meta">종목 점수는 5가지 항목을 더해 10점 만점이에요. 목표는 두 가지: <b>돈(외국인·기관)이 모이는 종목</b>을 찾고, 그중 <b>산 뒤 오를 확률이 높았던 조건</b>을 고르는 것.</div>
     <div class="wstack">${stack}</div>
     <div class="wlegend">${W.map(([n, w, c]) => `<span><span class="dot" style="background:${c}"></span>${n} ${w}</span>`).join('')}</div>
     ${rows}
-    <div class="meta" style="margin-top:8px">색: 7.5점 이상 초록(사기 좋음) · 6~7.4 노랑(관망) · 6 미만 빨강(주의)</div>
+    <div class="meta" style="margin-top:8px">색: 7.5점 이상 초록(사기 좋음) · 6~7.4 노랑(관망) · 6 미만 빨강(주의) · 업종 점수는 돈 흐름 중심의 예전 방식(수급·거래대금·지속성·촉매·가격위치)을 그대로 써요.</div>
+    <h3>🎯 매수 탭 조건</h3><ul class="why"><li>새 점수 7점 이상(바꿀 수 있어요) · 지금 가격이 매수 구간 안</li><li>오늘 거래대금이 평소 0.7~2.2배 · 과열(+8% 급등·거래 3.5배) 아님</li></ul>
     ${an}${discLine()}`);
   m.classList.add('sheet'); m.querySelector('#mcancel').onclick = closeModal;
 }
@@ -658,28 +685,36 @@ function buyScan(th, hideLow) {
     const L = plan ? [c.sw[code][0], c.sw[code][1], c.sw[code][4]] : r.l;
     if (!L || r.p == null) continue;
     const [bt, bb] = L, low = !plan && r.lw && String(r.lw[0] || '').startsWith('신저가');
+    const f = r.f || {};
+    if (f.hot) continue;                      // 오늘 과열(급등·거래 폭발)은 제외
     if (low && hideLow) continue;
     const it = { code, s: r.s, d: (r.p / bt - 1) * 100, low, my, plan };
-    if (r.p <= bt * 1.01 && (bb == null || r.p >= bb)) inz.push(it);
+    if (r.p <= bt * 1.01 && (bb == null || r.p >= bb)) { if (f.tvok) inz.push(it); }
     else if (r.p > bt * 1.01 && r.p <= bt * 1.03) near.push(it);
   }
   const so = (x, y) => y.s - x.s || Math.abs(x.d) - Math.abs(y.d);
   return { inz: inz.sort(so), near: near.sort(so), n };
 }
 function viewBuy() {
-  const th = +(localStorage.getItem('mf_bth') || 6.5), hideLow = localStorage.getItem('mf_bhide') === '1';
+  const th = +(localStorage.getItem('mf_bth2') || 7), hideLow = localStorage.getItem('mf_bhide') === '1';
   const { inz, near, n } = buyScan(th, hideLow);
   const chips = [6.0, 6.5, 7.0].map(v => `<button class="chip ${v === th ? 'on' : ''}" data-act="bth" data-v="${v}">${v.toFixed(1)}점+</button>`).join('')
     + `<button class="chip ${hideLow ? 'on' : ''}" data-act="bhide">신저가 숨기기</button>`;
   const card = it => stockCard(it.code, { k: '-b', tag: (it.low ? '<span class="tag t-low" data-tip="52주 신저가라 아래 지지선이 없어요. 현재가~−3%를 임시 매수 구간으로 둔 것이라 반등을 확인한 뒤 사는 게 안전해요">52주 신저가 · 반등 확인</span>' : '') + (it.plan ? '<span class="tag t-plan">내 계획 기준</span>' : '') + (it.my ? '<span class="tag t-my">내 종목</span>' : '') });
+  if (!ANALYSIS) loadAnalysis().then(() => { if (TAB === 'buy') render(); });
+  const R = ANALYSIS && ANALYSIS.v === 2 && ANALYSIS.rule[String(th)], B = ANALYSIS && ANALYSIS.base;
+  const odds = R ? `<div class="card odds"><div class="row"><b>과거 같은 조건 (확인 기간 ${pd8(ANALYSIS.test[0])}~${pd8(ANALYSIS.test[1])})</b><button class="linkbtn" data-act="weights">ⓘ 자세히</button></div>
+      <div class="oddsrow"><div><span class="big">${R.te.h10}%</span><span class="meta">10거래일 뒤 상승</span></div><div><span class="big mut">${B.te.h10}%</span><span class="meta">전체 종목 평균</span></div><div><span class="big">${R.te.tgt}%</span><span class="meta">1차 매도가 먼저</span></div></div>
+      <div class="meta">같은 날 전체보다 +${R.te.ex10}%p · 손절선 먼저 ${R.te.stop}% · 표본 ${fmt(R.te.n)}건. 과거 성과는 미래를 보장하지 않아요.</div></div>` : '';
   return `<h2>🎯 점수 좋고 지금 매수 구간인 종목</h2>${discLine('sm')}
-    <div class="meta hint">점수 ${th.toFixed(1)}점 이상 · 현재가가 매수 구간 안 · 20일 평균 거래대금 ${BUY_MIN_TV}억 이상(우선주·스팩 제외) + 내 보유·관심 종목 · 검사 ${fmt(n)}종목 · 내 계획이 있으면 그 구간 기준</div>
+    <div class="meta hint">새 점수 ${th.toFixed(1)}점 이상 · 현재가가 매수 구간 안 · 오늘 거래대금 평소 0.7~2.2배 · 과열(+8% 급등·거래 3.5배) 아님 · 20일 평균 거래대금 ${BUY_MIN_TV}억 이상(우선주·스팩 제외) + 내 보유·관심 종목 · 검사 ${fmt(n)}종목</div>
+    ${odds}
     <div class="chips">${chips}</div>
     ${inz.length || near.length ? foldAllBar() : ''}
     <h2>🔵 지금 매수 구간 (${inz.length})</h2>
     ${inz.length ? inz.map(card).join('') : '<div class="card meta">지금 조건에 맞는 종목이 없어요. 점수 기준을 낮춰 보세요.</div>'}
     <h2>⏳ 가까워지는 중 (${near.length})</h2>
-    <div class="meta hint">매수 구간 위쪽보다 0~3% 위 · 조금 내려오면 매수 구간</div>
+    <div class="meta hint">매수 구간 위쪽보다 0~3% 위 · 조금 내려오면 매수 구간 (거래대금 조건은 매수 구간에 들어올 때 다시 봐요)</div>
     ${near.length ? near.map(card).join('') : '<div class="card meta">해당 종목이 없어요.</div>'}
     <div class="meta hint">참고용이에요. 점수는 공개 시세로 계산한 근사치이고, 매수 구간은 일봉 지지선으로 자동 계산한 값이에요.</div>`;
 }
@@ -747,15 +782,15 @@ function viewHelp() {
   <div class="card"><b>화면 테마</b><div class="theme-sel">${[['dark', '다크'], ['light', '라이트'], ['auto', '휴대폰 설정 따르기']].map(([k, n]) => `<button class="chip ${(localStorage.getItem('mf_theme') || 'dark') === k ? 'on' : ''}" data-act="theme" data-v="${k}">${n}</button>`).join('')}</div></div>
   <div class="card">${discLine()}</div>
   <h2>❓ 점수와 가격선은 이렇게 정해요</h2>
-  <button class="bigbtn" style="width:100%;margin-bottom:12px" data-act="weights">점수는 이렇게 매겨요 · 배점과 지난 1년 분석 보기</button>
-  <div class="card"><b>점수 (10점 만점)</b><ul class="why">
-    <li><b>수급 3점</b>: 전 거래일과 최근 3일 동안 외국인+기관 순매수가 거래량에서 차지하는 비율. 많이 살수록 높아요.</li>
-    <li><b>거래대금 2점</b>: 오늘 거래대금이 20일 평균보다 얼마나 빠른 속도로 쌓이는지 (장중엔 지난 시간만큼 비례 계산). 평소의 2배 속도면 만점.</li>
-    <li><b>지속성 2점</b>: 최근 5거래일 중 외국인+기관이 순매수한 날 수. 5일 모두면 만점.</li>
-    <li><b>촉매 2점 (근사치)</b>: 뉴스·공시는 자동으로 읽지 못해서, 오늘 시장(코스피·코스닥) 대비 얼마나 강한지로 대신해요. 업종은 업종 안 오른 종목 비율도 반영.</li>
-    <li><b>가격위치 1점</b>: 60일 고가~저가 범위에서 낮은 곳일수록 높은 점수 (저점 매수). 52주 위치는 참고로 같이 보여줘요.</li>
+  <button class="bigbtn" style="width:100%;margin-bottom:12px" data-act="weights">점수는 이렇게 매겨요 · 배점과 과거 검증 보기</button>
+  <div class="card"><b>종목 점수 (10점 만점, v1.8)</b><ul class="why">
+    <li><b>수급 3점</b>: 최근 20거래일 외국인+기관 순매수 ÷ 거래량. 0% 이하 0점, +6% 이상 만점.</li>
+    <li><b>거래대금 2점</b>: 오늘 거래대금 속도가 평소(20일 평균)의 0.7~2.2배면 만점 (장중엔 지난 시간만큼 비례 계산). 너무 한산하거나 3.5배 넘게 폭발하면 0점.</li>
+    <li><b>안정성 2점</b>: 최근 20일 하루 등락률 표준편차 2% 이하 만점, 5% 이상 0점.</li>
+    <li><b>추세 2점</b>: 20일 고점 대비 −5% 이내 만점, −20% 이하 0점.</li>
+    <li><b>과열 아님 1점</b>: 오늘 +8% 넘는 급등이나 거래대금 3.5배 초과면 0점.</li>
     <li>🟢 7.5점 이상 <b>사기 좋음</b> · 🟡 6~7.4 <b>관망</b> · 🔴 6점 미만 <b>주의</b></li>
-    <li>업종 점수: 업종(네이버 업종 분류) 시가총액 상위 5종목(우선주 제외)을 합산.</li>
+    <li>업종 점수: 업종(네이버 업종 분류) 시가총액 상위 5종목(우선주 제외)의 돈 흐름으로 매겨요 — 수급 3 · 거래대금 2 · 지속성 2(5일 중 순매수한 날) · 촉매 2(시장 대비 강도·오른 종목 비율) · 가격위치 1.</li>
     <li>${esc(DATA.flow_note)}</li></ul></div>
   <div class="card"><b>가격선 (매수·매도·손절)</b><ul class="why"><li>${esc(DATA.levels_rule)}</li>
     <li>모두 실제 일봉 고가·저가에서 뽑아요. 아래에서 직접 넣은 계획이 있으면 그것을 먼저 써요.</li>
@@ -844,7 +879,7 @@ document.addEventListener('click', e => {
   if (t.dataset.act === 'share') { doShare(); return; }
   if (t.dataset.act === 'copylink') { copyLink(); return; }
   if (t.dataset.act === 'hideinst') { localStorage.setItem('mf_insthide', '1'); render({ full: true }); return; }
-  if (t.dataset.act === 'bth') { localStorage.setItem('mf_bth', t.dataset.v); render({ full: true }); return; }
+  if (t.dataset.act === 'bth') { localStorage.setItem('mf_bth2', t.dataset.v); render({ full: true }); return; }
   if (t.dataset.act === 'bhide') { localStorage.setItem('mf_bhide', localStorage.getItem('mf_bhide') === '1' ? '0' : '1'); render({ full: true }); return; }
   if (t.dataset.act === 'wtab') { localStorage.setItem('mf_wtab', t.dataset.id); render({ full: true }); return; }
   if (t.dataset.act === 'addtab') { askName('새 관심 탭 이름', '', name => { const cc = cfg(); const l = { id: newId(), name, codes: [] }; cc.lists.push(l); saveCfg(cc); localStorage.setItem('mf_wtab', l.id); render({ full: true }); }); return; }

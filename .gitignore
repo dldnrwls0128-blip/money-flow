@@ -4,3 +4,4 @@ cache/
 _site/
 logos/
 info.json
+__pycache__/

@@ -41,7 +41,7 @@ PREF = re.compile(r"(\d?우[A-C]?|우선주)$|스팩|SPAC|ETN|리츠$")
 
 # ---------------- 일별 캐시 ----------------
 def stock_daily(code):
-    tr = get(f"https://m.stock.naver.com/api/stock/{code}/trend?pageSize=10") or []
+    tr = get(f"https://m.stock.naver.com/api/stock/{code}/trend?pageSize=20") or []
     end = dt.datetime.now(KST).strftime("%Y%m%d")
     start = (dt.datetime.now(KST) - dt.timedelta(days=380)).strftime("%Y%m%d")
     raw = get(f"https://api.finance.naver.com/siseJson.naver?symbol={code}&requestType=1&startTime={start}&endTime={end}&timeframe=day", raw=True)
@@ -53,7 +53,7 @@ def stock_daily(code):
     full = [r for r in rows if r[0] < today]  # 완료된 거래일만 (약 1년)
     hist = full[-60:]
     flows = []
-    for t in tr[:10]:
+    for t in tr[:20]:
         v = num(t.get("accumulatedTradingVolume")) or 0
         flows.append({"d": t["bizdate"], "f": num(t.get("foreignerPureBuyQuant")) or 0,
                       "o": num(t.get("organPureBuyQuant")) or 0, "v": v, "c": num(t.get("closePrice")) or 0})
@@ -61,7 +61,11 @@ def stock_daily(code):
         return None
     tv20 = [r[4] * r[5] for r in hist[-20:]]
     y1 = [r for r in full[-250:] if r[2] > 0 and r[3] > 0] or hist   # 52주 = 최근 약 250거래일 (거래정지 0값 제외)
+    cl = [r[4] for r in full[-21:]]
+    ch = [(cl[i] / cl[i - 1] - 1) * 100 for i in range(1, len(cl)) if cl[i - 1] > 0]
+    vol20 = (sum((x - sum(ch) / len(ch)) ** 2 for x in ch) / (len(ch) - 1)) ** 0.5 if len(ch) >= 10 else None
     return {"flows": flows, "hi60": max(r[2] for r in hist), "lo60": min(r[3] for r in hist),
+            "vol20": round(vol20, 3) if vol20 is not None else None, "hi19": max(r[2] for r in full[-19:]),
             "hi52": max(r[2] for r in y1), "lo52": min(r[3] for r in y1),
             "hi52d": max(y1, key=lambda r: r[2])[0], "lo52d": min(y1, key=lambda r: r[3])[0],
             "avgtv20": sum(tv20) / len(tv20), "last": hist[-1][0],
@@ -198,6 +202,37 @@ def score_parts(flows, tv_today, avgtv20, frac, chg, mkt_chg, price, lo60, hi60,
     pt = [round(s_sup, 1), round(s_val, 1), round(s_per, 1), round(s_cat, 1), round(s_pos, 1)]
     return round(sum([s_sup, s_val, s_per, s_cat, s_pos]), 1), pt, f
 
+NEW_PARTS = (("수급", 3), ("거래대금", 2), ("안정성", 2), ("추세", 2), ("과열 아님", 1))
+def score_new(flows, tv_today, avgtv20, frac, chg, price, vol20, hi19):
+    """v1.8 점수 (2023.11~2026.11 백테스트로 고름, scripts/research/)
+    수급 3: 최근 20거래일 외국인+기관 순매수 ÷ 거래량 (0% 이하 0점, 6% 이상 만점)
+    거래대금 2: 오늘 거래대금 속도가 평소(20일 평균)의 0.7~2.2배면 만점, 0.5~0.7·2.2~3.5배 1점, 그 밖 0점
+    안정성 2: 최근 20일 하루 등락률 표준편차 2% 이하 만점, 5% 이상 0점
+    추세 2: 20일 고점 대비 −5% 이내 만점, −20% 이하 0점
+    과열 아님 1: 오늘 +8% 넘게 급등했거나 거래대금이 평소 3.5배 넘으면 0점"""
+    f = {}
+    fl = flows[:20] if flows else []
+    v = sum(x["v"] for x in fl)
+    if fl and v:
+        r20 = sum(x["f"] + x["o"] for x in fl) / v
+        s_sup = clamp(r20 / 0.06, 0, 1) * 3; f["f20"] = round(r20 * 100, 1); f["n20"] = len(fl)
+        f["pd20"] = sum(1 for x in fl if x["f"] + x["o"] > 0)
+    else:
+        s_sup = 0.0
+    pace = tv_today / (avgtv20 * frac) if avgtv20 and tv_today is not None else None
+    s_tv = 0 if pace is None else 2 if 0.7 <= pace <= 2.2 else 1 if 0.5 <= pace <= 3.5 else 0
+    s_vol = clamp((5 - vol20) / 3, 0, 1) * 2 if vol20 is not None else 1.0
+    if vol20 is not None: f["vol"] = round(vol20, 1)
+    if price and hi19:
+        dh = price / max(hi19, price) - 1; s_tr = clamp((dh + 0.2) / 0.15, 0, 1) * 2; f["dh"] = round(dh * 100, 1)
+    else:
+        s_tr = 1.0
+    hot = (chg or 0) > 8 or (pace or 0) > 3.5
+    f["hot"] = 1 if hot else 0
+    f["tvok"] = 1 if s_tv == 2 else 0
+    pt = [round(s_sup, 1), round(s_tv, 1), round(s_vol, 1), round(s_tr, 1), 0.0 if hot else 1.0]
+    return round(sum(pt), 1), pt, f
+
 def lv_compact(lv):
     if not lv: return None
     return [lv.get(k) for k in ("buy1", "buy2", "stop", "sell1", "sell2")], [lv.get(k + "_why") for k in ("buy1", "buy2", "stop", "sell1", "sell2")]
@@ -274,12 +309,12 @@ def main():
     cpath = os.path.join(ROOT, "cache", "daily.json")
     cache = json.load(open(cpath, encoding="utf-8")) if os.path.exists(cpath) else {}
     today = now.strftime("%Y%m%d")
-    full = force or cache.get("v") != 4 or (hm >= 1750 and cache.get("key") != today)
+    full = force or cache.get("v") != 5 or (hm >= 1750 and cache.get("key") != today)
     changed = False
     if full:
         codes = sorted(set(quotes) | set(core))
         print("일별 데이터 전 종목 새로 받는 중:", len(codes)); t0 = time.time()
-        cache = {"v": 4, "key": today if hm >= 1750 else "day-" + today, "made": now.isoformat(timespec="minutes"), "stocks": build_daily(codes)}
+        cache = {"v": 5, "key": today if hm >= 1750 else "day-" + today, "made": now.isoformat(timespec="minutes"), "stocks": build_daily(codes)}
         print("일별 완료", round(time.time() - t0), "초", len(cache["stocks"])); changed = True
     else:
         miss = [c for c in core if c not in cache["stocks"]]
@@ -301,8 +336,9 @@ def main():
         if d:
             total, pt, f = score_parts(d["flows"], q["tv"], d["avgtv20"], frac, q["pct"], mkt_pct.get(q["mkt"]), q["price"],
                                        d["lo60"], d["hi60"], d.get("lo52"), d.get("hi52"))
-            f["rk"] = rank.get(c); f["tot"] = len(rank)
-            r.update(s=total, pt=pt, f=f, a20=round(d["avgtv20"] / 1e8))
+            s2, pt2, f2 = score_new(d["flows"], q["tv"], d["avgtv20"], frac, q["pct"], q["price"], d.get("vol20"), d.get("hi19"))
+            f.update(f2); f["rk"] = rank.get(c); f["tot"] = len(rank)
+            r.update(s=s2, pt=pt2, f=f, a20=round(d["avgtv20"] / 1e8))
             if d.get("hi52d"): r["y52"] = [max(d["hi52"], q["price"] or 0), d["hi52d"], min(d["lo52"], q["price"] or d["lo52"]), d["lo52d"]]
             if PREF.search(q["name"]): r["pf"] = 1
             lc = lv_compact(round_levels(levels(q["price"], d.get("sr"))))
@@ -320,7 +356,7 @@ def main():
         for i in range(10):
             f_ = o_ = v_ = 0; dd = None
             for c in top:
-                fl = daily[c]["flows"]
+                fl = daily[c]["flows"][:10]
                 if len(fl) > i:
                     f_ += fl[i]["f"] * fl[i]["c"]; o_ += fl[i]["o"] * fl[i]["c"]; v_ += fl[i]["v"] * fl[i]["c"]; dd = fl[i]["d"]
             if v_: agg.append({"d": dd, "f": f_, "o": o_, "v": v_, "c": 1})

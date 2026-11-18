@@ -264,3 +264,9 @@ html[data-theme=light] .sk::after{background:linear-gradient(90deg,transparent,r
 .wbar{height:6px;border-radius:3px;background:var(--sunk);margin:6px 0;overflow:hidden}.wbar i{display:block;height:100%}
 .contrib{padding:4px 0 8px;border-bottom:1px solid var(--line2);margin-bottom:4px}.contrib .linkbtn{margin:0;font-size:13px}
 .card.inner{box-shadow:none;background:var(--card2);margin-top:6px}
+/* v1.8.0 과거 검증 표 · 🎯 확률 카드 */
+.atab{width:100%;border-collapse:collapse;font-size:13.5px;margin:10px 0 4px}
+.atab th,.atab td{padding:7px 4px;border-bottom:1px solid var(--line2);text-align:right}
+.atab th:first-child,.atab td:first-child{text-align:left}.atab th{color:var(--mut);font-weight:600;font-size:12.5px}
+.odds .oddsrow{display:flex;gap:8px;margin:10px 0 6px}.odds .oddsrow>div{flex:1;background:var(--card2);border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.odds .big{font-size:22px;font-weight:800;color:var(--acc)}.odds .big.mut{color:var(--tx2)}.odds .linkbtn{margin:0;font-size:13px}
