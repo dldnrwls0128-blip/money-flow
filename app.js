@@ -101,11 +101,17 @@ function explain(pt, f, sector) {
 }
 function detailHTML(id, r, sector) {
   if (!r.pt) return `<div class="meta" style="margin-top:8px">아직 점수용 일별 데이터가 없어요 (장 마감 후 갱신 때 채워져요).</div>`;
+  const tot = r.pt.reduce((x, y) => x + y, 0) || 1, CC = ['#3182f6', '#2fca73', '#a78bfa', '#f2b705', '#ff7a59'];
+  const top = r.pt.length ? r.pt.indexOf(Math.max(...r.pt)) : -1;
+  const contrib = `<div class="contrib"><div class="row"><b>점수 구성</b><button class="linkbtn" data-act="weights">ⓘ 점수 기준</button></div>
+    <div class="cstack">${r.pt.map((v, i) => `<i style="width:${v * 10}%;background:${CC[i]}" data-tip="${PARTS[i][0]} ${v}점 (총점의 ${Math.round(v / tot * 100)}%)"></i>`).join('')}</div>
+    <div class="clegend">${r.pt.map((v, i) => `<span${i === top ? ' class="ctop"' : ''}><span class="dot" style="background:${CC[i]}"></span>${PARTS[i][0]} <b>${v}</b></span>`).join('')}</div>
+    <div class="meta">막대 길이 = 각 항목이 10점 중 차지한 점수 · ${top >= 0 ? `점수를 가장 많이 끌어올린 항목: <b>${PARTS[top][0]} ${r.pt[top]}점</b>` : ''}</div></div>`;
   const rows = explain(r.pt, r.f, sector).map(([[k, m], v, ev, it]) => `
-    <div class="ex"><div class="row"><b>${k}</b><b class="c-${lvl(v / m * 10)}">${v} / ${m}</b></div>
+    <div class="ex"><div class="row"><b>${k} <span class="meta">배점 ${m}</span></b><b class="c-${lvl(v / m * 10)}">${v} / ${m} <span class="meta">(${Math.round(v / m * 100)}% × ${m}점 · 총점의 ${Math.round(v / tot * 100)}%)</span></b></div>
     <div class="pb"><i style="width:${v / m * 100}%;background:${COLOR[lvl(v / m * 10)]}"></i></div>
     <div class="meta">${esc(ev)}</div>${it ? `<div>👉 ${esc(it)}</div>` : ''}</div>`).join('');
-  return `<div class="detail">${rows}<div class="meta">기준: 수급 ${r.f && r.f.fd ? md(r.f.fd) + ' 확정치' : '–'} · 시세 ${kst(DATA.updated)} · <a href="#" data-tab="help">점수 규칙 보기</a></div></div>`;
+  return `<div class="detail">${contrib}${rows}${discLine('sm')}<div class="meta">기준: 수급 ${r.f && r.f.fd ? md(r.f.fd) + ' 확정치' : '–'} · 시세 ${kst(DATA.updated)} · <a href="#" data-tab="help">점수 규칙 보기</a></div></div>`;
 }
 
 // ---------- 가격 띠(게이지): 매수 구간 · 매도 구간 · 손절선 ----------
@@ -209,7 +215,7 @@ function stockCard(code, opt = {}) {
   return `<div class="card">
     <div class="row"><div><div class="name nm tap" data-act="info" data-code="${code}">${logo(code, r.n)}<span>${esc(r.n)} <span class="meta">${code}</span> <span class="ibtn">ⓘ</span></span></div>
       <div class="meta">${money(r.p)} <span class="${cls(r.c)}">${pct(r.c)}</span>${r.sec ? ' · ' + esc(r.sec) : ''}</div></div>
-      <button class="sbtn c-${L_}" data-fold="${code}" aria-label="점수 상세 펼치기"><span class="score">${r.s ?? '–'}</span><span class="badge b-${L_}">${lbl(r.s)}</span></button></div>
+      <button class="sbtn c-${L_}" data-fold="${code}" aria-label="점수 상세 펼치기"><span class="score">${r.s ?? '–'}</span><span class="badge b-${L_}">${lbl(r.s)}</span><span class="winfo" data-act="weights">ⓘ 점수 기준</span></button></div>
     <div class="bar"><i style="width:${(r.s || 0) * 10}%;background:${COLOR[L_]}"></i></div>
     ${opt.tag ? `<div class="tags">${opt.tag}</div>` : ''}
     ${pl}${foldBlock(code, gauge(r.p, L, c.sw[code] ? null : r.lw, false, !!c.sw[code]), whyHTML(r.f, r.sec) + detailHTML(id, r))}
@@ -454,6 +460,54 @@ function overseasInfo(o) {
     ${o.h52 != null ? g('52주 최고', usd(o.h52)) : ''}${o.l52 != null ? g('52주 최저', usd(o.l52)) : ''}</div>
     <div class="meta" style="margin-top:8px">${o.at ? '자료: Yahoo Finance (무료 자료라 시총·재무는 없어요)' : '자료: CoinGecko'}</div>`;
 }
+// ---------- 투자 책임 안내 · 점수 기준 설명 ----------
+const DISC = '본 앱의 점수·구간은 참고용 정보이며 투자 판단과 그 결과의 책임은 본인에게 있습니다.';
+const discLine = (cls = '') => `<div class="disc ${cls}">⚠️ ${DISC}</div>`;
+function firstDisclaimer() {
+  if (localStorage.getItem('mf_disc') === '1' || $('#modal')) return;
+  const m = modal(`<div class="sheet-h"><b>시작하기 전에 꼭 읽어 주세요</b></div>
+    <div class="discbig">${DISC}</div>
+    <ul class="why"><li>점수는 공개된 시세·수급 데이터로 자동 계산한 <b>근사치</b>예요. 매수·매도 추천이 아니에요.</li>
+      <li>매수·매도·손절 구간은 과거 고가·저가로 기계적으로 뽑은 값이라 실제와 다를 수 있어요.</li>
+      <li>데이터가 늦거나 틀릴 수 있어요. 중요한 결정 전에는 증권사 앱에서 꼭 확인하세요.</li></ul>
+    <button class="bigbtn" style="width:100%;margin-top:12px" id="discok">확인했어요</button>`);
+  m.classList.add('sheet');
+  m.addEventListener('click', e => { if (e.target === m) e.stopImmediatePropagation(); }, true);   // 바깥 눌러 닫기 막기
+  m.querySelector('#discok').onclick = () => { localStorage.setItem('mf_disc', '1'); closeModal(); };
+}
+let ANALYSIS = null;
+async function openWeights() {
+  if (!ANALYSIS) { try { ANALYSIS = await (await fetch('analysis.json', { cache: 'no-store' })).json(); } catch { ANALYSIS = {}; } }
+  const W = [['수급', 3, '#3182f6', '외국인·기관이 사고 있나', '전 거래일과 최근 3일 외국인+기관 순매수가 거래량에서 차지하는 비율', '네이버 투자자별 매매동향'],
+    ['거래대금', 2, '#2fca73', '평소보다 돈이 몰리나', '오늘 거래대금이 20일 평균보다 얼마나 빠르게 쌓이는지 (2배면 만점)', '네이버 시세·일봉'],
+    ['지속성', 2, '#a78bfa', '며칠째 꾸준한가', '최근 5거래일 중 외국인+기관 순매수였던 날 수', '네이버 투자자별 매매동향'],
+    ['촉매', 2, '#f2b705', '오늘 시장보다 강한가', '오늘 등락률 − 시장(코스피/코스닥) 등락률. 뉴스를 직접 읽지 않고 “강도”로 대신 재요 (업종은 오른 종목 비율도)', '네이버 시세·지수'],
+    ['가격 위치', 1, '#ff7a59', '싸게 살 자리인가', '최근 60거래일 고가~저가 중 지금 위치. 바닥에 가까울수록 높아요', '네이버 일봉']];
+  const stack = W.map(([n, w, c]) => `<i style="width:${w * 10}%;background:${c}" title="${n} ${w}점"></i>`).join('');
+  const rows = W.map(([n, w, c, q, how, src]) => `<div class="wrow"><div class="row"><b><span class="dot" style="background:${c}"></span>${n}</b><b>${w}점 <span class="meta">(${w * 10}%)</span></b></div>
+    <div class="wbar"><i style="width:${w / 3 * 100}%;background:${c}"></i></div><div><b>${q}</b> — ${how}</div><div class="meta">자료: ${src}</div></div>`).join('');
+  const A = ANALYSIS || {}; let an = '';
+  if (A.rows) {
+    const g = n => A.rows.find(r => r.n === n) || {};
+    const cur = g('현재(3·2·2·2·1)'), pos = g('가격위치만'), cat = g('촉매만'), val = g('거래대금만');
+    const p = s => `${s.slice(0, 4)}.${+s.slice(4, 6)}.${+s.slice(6, 8)}`;
+    an = `<h3>지난 1년 점수를 되짚어 봤어요</h3>
+    <div class="card inner"><div class="meta">${p(A.period[0])} ~ ${p(A.period[1])} · ${fmt(A.days)}거래일 · ${fmt(A.stocks)}종목 · 표본 ${fmt(A.obs)}개 · 매일 장 마감 점수 → 다음 5·10거래일 수익률</div>
+      <ul class="why"><li><b>총점과 이후 수익률의 관계는 거의 없었어요.</b> 순위 상관 5일 ${cur.ic5}, 10일 ${cur.ic10} (0이면 무관, ±1이면 완전 일치).</li>
+        <li>점수 상위 20% 종목의 5일 뒤 상승 비율 ${cur.hit5}% · 전체 평균 ${A.base_up['5일']}%와 비슷했어요.</li>
+        <li>항목별로는 <b>가격 위치</b>(싸게 살 자리)가 조금 플러스(${pos.ic5}), <b>촉매</b>(오늘 강세)는 조금 마이너스(${cat.ic5}) — 오늘 많이 오른 종목은 며칠 뒤 되돌림이 있었다는 뜻이에요. 거래대금 ${val.ic5}.</li>
+        <li>가중치를 바꿔도(수급 4·가격 0, 모두 같게 등) 뚜렷하게 나아지지 않아서 <b>지금 배점은 그대로</b> 두었어요.</li></ul>
+      <div class="disc">과거 결과가 미래 수익을 보장하지 않아요. 1년·하락장 위주 표본이고, 지금 거래가 많은 종목만 봐서(생존 편향) 한계가 있어요.</div></div>`;
+  }
+  const m = modal(`<div class="sheet-h"><b>점수는 이렇게 매겨요</b><button class="mini" id="mcancel">닫기</button></div>
+    <div class="meta">5가지 항목 점수를 더해 10점 만점이에요. 각 항목은 0%~100%로 채점한 뒤 배점을 곱해요.</div>
+    <div class="wstack">${stack}</div>
+    <div class="wlegend">${W.map(([n, w, c]) => `<span><span class="dot" style="background:${c}"></span>${n} ${w}</span>`).join('')}</div>
+    ${rows}
+    <div class="meta" style="margin-top:8px">색: 7.5점 이상 초록(사기 좋음) · 6~7.4 노랑(관망) · 6 미만 빨강(주의)</div>
+    ${an}${discLine()}`);
+  m.classList.add('sheet'); m.querySelector('#mcancel').onclick = closeModal;
+}
 // ---------- 앱 설치 · 친구에게 공유 ----------
 const PLAIN_URL = 'https://dldnrwls0128-blip.github.io/money-flow/';   // 공유는 항상 이 주소만 (설정 링크 X)
 const UA = navigator.userAgent || '';
@@ -563,7 +617,7 @@ function viewHome() {
   ${D.stocks_top.map(s => stockCard(s.code, { k: '-top' })).join('')}
   <h2>📋 전체 업종 (${D.sectors_all.length}개)</h2>
   ${OPEN.has('allsec') ? D.sectors_all.map(sectorCard).join('') + `<button class="pickbtn" data-toggle="allsec">▲ 접기</button>`
-    : `<button class="pickbtn" data-toggle="allsec">▼ 전체 업종 점수 펼치기</button>`}`;
+    : `<button class="pickbtn" data-toggle="allsec">▼ 전체 업종 점수 펼치기</button>`}` + discLine('home');
 }
 const sortS = a => a.slice().sort((x, y) => ((ALL[y] || {}).s ?? -1) - ((ALL[x] || {}).s ?? -1));
 function viewHold() {
@@ -618,7 +672,7 @@ function viewBuy() {
   const chips = [6.0, 6.5, 7.0].map(v => `<button class="chip ${v === th ? 'on' : ''}" data-act="bth" data-v="${v}">${v.toFixed(1)}점+</button>`).join('')
     + `<button class="chip ${hideLow ? 'on' : ''}" data-act="bhide">신저가 숨기기</button>`;
   const card = it => stockCard(it.code, { k: '-b', tag: (it.low ? '<span class="tag t-low" data-tip="52주 신저가라 아래 지지선이 없어요. 현재가~−3%를 임시 매수 구간으로 둔 것이라 반등을 확인한 뒤 사는 게 안전해요">52주 신저가 · 반등 확인</span>' : '') + (it.plan ? '<span class="tag t-plan">내 계획 기준</span>' : '') + (it.my ? '<span class="tag t-my">내 종목</span>' : '') });
-  return `<h2>🎯 점수 좋고 지금 매수 구간인 종목</h2>
+  return `<h2>🎯 점수 좋고 지금 매수 구간인 종목</h2>${discLine('sm')}
     <div class="meta hint">점수 ${th.toFixed(1)}점 이상 · 현재가가 매수 구간 안 · 20일 평균 거래대금 ${BUY_MIN_TV}억 이상(우선주·스팩 제외) + 내 보유·관심 종목 · 검사 ${fmt(n)}종목 · 내 계획이 있으면 그 구간 기준</div>
     <div class="chips">${chips}</div>
     ${inz.length || near.length ? foldAllBar() : ''}
@@ -691,7 +745,9 @@ function viewHelp() {
     <ul class="why">${(self.APP_CHANGES || []).map(([v, d, t]) => `<li><b>v${esc(v)}</b> (${esc(d)}) ${esc(t)}</li>`).join('')}</ul></div>
   ${shareHelpCard()}
   <div class="card"><b>화면 테마</b><div class="theme-sel">${[['dark', '다크'], ['light', '라이트'], ['auto', '휴대폰 설정 따르기']].map(([k, n]) => `<button class="chip ${(localStorage.getItem('mf_theme') || 'dark') === k ? 'on' : ''}" data-act="theme" data-v="${k}">${n}</button>`).join('')}</div></div>
+  <div class="card">${discLine()}</div>
   <h2>❓ 점수와 가격선은 이렇게 정해요</h2>
+  <button class="bigbtn" style="width:100%;margin-bottom:12px" data-act="weights">점수는 이렇게 매겨요 · 배점과 지난 1년 분석 보기</button>
   <div class="card"><b>점수 (10점 만점)</b><ul class="why">
     <li><b>수급 3점</b>: 전 거래일과 최근 3일 동안 외국인+기관 순매수가 거래량에서 차지하는 비율. 많이 살수록 높아요.</li>
     <li><b>거래대금 2점</b>: 오늘 거래대금이 20일 평균보다 얼마나 빠른 속도로 쌓이는지 (장중엔 지난 시간만큼 비례 계산). 평소의 2배 속도면 만점.</li>
@@ -764,6 +820,7 @@ function render(opts = {}) {
 }
 
 document.addEventListener('click', e => {
+  if (e.target.closest('[data-act=weights]')) { e.preventDefault(); openWeights(); return; }
   const fa = e.target.closest('[data-foldall]');
   if (fa) { const op = fa.dataset.foldall === '1'; document.querySelectorAll('#app .fold').forEach(f => { f.classList.toggle('open', op); setFold(f.dataset.code, op); const b = f.querySelector('.fhead'); b.setAttribute('aria-expanded', op); b.querySelector('.ftog').textContent = op ? '접기 ▴' : '상세 ▾'; }); return; }
   const fd = e.target.closest('[data-fold]');
@@ -839,6 +896,7 @@ async function load(manual) {
       setTimeout(() => { FLASH = ''; setUpdated(); }, 6000);
     }
     if (changed) render(); else setUpdated();
+    firstDisclaimer();
     return true;
   } catch (e) {
     if (manual) { FLASH = '⚠️ 인터넷 연결을 확인해 주세요'; setUpdated(); }
