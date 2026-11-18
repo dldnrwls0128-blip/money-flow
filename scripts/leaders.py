@@ -39,7 +39,7 @@ def main():
     now = dt.datetime.now(KST); force = "--force" in sys.argv
     old = json.load(open(OUT, encoding="utf-8")) if os.path.exists(OUT) else None
     today = now.strftime("%Y%m%d"); closed = now.weekday() < 5 and (now.hour, now.minute) >= (15, 45)
-    if old and not force:   # 하루 한 번(장 마감 뒤) 또는 주말·휴장일엔 3시간에 한 번만 확인
+    if old and old.get("v") == 2 and not force:   # 하루 한 번(장 마감 뒤) 또는 주말·휴장일엔 3시간에 한 번만 확인
         want = today if closed else None
         chk = dt.datetime.fromisoformat(old.get("checked", "2000-01-01T00:00:00+09:00"))
         if (want and old.get("asof") == want) or (not want and (now - chk).total_seconds() < 3 * 3600) or (want and (now - chk).total_seconds() < 1800):
