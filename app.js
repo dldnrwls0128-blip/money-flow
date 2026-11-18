@@ -1,7 +1,7 @@
 'use strict';
 const $ = s => document.querySelector(s);
 const app = $('#app');
-let DATA = null, ALL = {}, ALL_UPD = null, TAB = 'home', Q = '';
+let DATA = null, ALL = {}, ALL_UPD = null, TAB = 'lead', Q = '';
 let LOGOS = new Set();
 fetch('logos/index.json?t=' + Math.floor(Date.now() / 3600000), { cache: 'no-store' }).then(r => r.json()).then(a => { LOGOS = new Set(a); if (DATA) render({ full: true }); }).catch(() => {});
 const LCOL = ['#2563eb', '#16a34a', '#db2777', '#ea580c', '#7c3aed', '#0891b2', '#ca8a04', '#dc2626'];
@@ -529,7 +529,9 @@ async function openWeights() {
     const tr = (lab, x) => `<tr><td>${lab}</td><td>${x.승률}%</td><td>1:${x.손익비}</td><td><b>${p(x.기대수익)}</b></td><td>${x.PF}</td></tr>`;
     const tab = (k, title) => `<table class="atab"><tr><th>${title}</th><th>승률</th><th>손익비</th><th>1번 매매당 기대수익</th><th>PF</th></tr>
         ${tr('전체 종목에 같은 매매법', B[k])}${tr('v1.8 (예전 점수·가격선)', C[k])}${tr('<b>v1.9 (새 점수·가격선)</b>', N[k])}</table>`;
-    an = `<h3>얼마나 잘 맞았나 (매매 시뮬레이션)</h3>
+    an = `<h3>계좌 전체로 보면 (v2.0에서 다시 계산)</h3>
+    <div class="card inner real"><ul class="why"><li>돈을 10칸(또는 5칸)으로 나눠 신호 순서대로 샀다고 치면: 고른 기간(23.11~25.11) <b>연 16.9%</b>(5칸 16.5%), 최대 하락 −12~−15% · 확인 1년(25.11~26.11) <b>+1.1%</b>(5칸 −1.1%), 최대 하락 −15~−19%.</li><li>아래 표의 '1번 매매당 기대수익'은 신호 하나하나를 자금 제한 없이 평균 낸 값이에요. 실제 계좌에서는 같은 날 신호가 겹쳐 다 살 수 없어서 <b>확인 기간 계좌 기준 매매당 +0.1~0.2% 수준</b>이었어요.</li><li>그래서 v2.0부터 기본 전략은 <a href="#" data-tab="lead">주도주 탭</a>(시장 폭 + 2주 연속 주도 업종)이에요.</li></ul></div>
+    <h3>신호 하나하나로 본 결과 (매매 시뮬레이션)</h3>
     <div class="card inner"><div class="meta">${pd8(A.period[0])}~${pd8(A.period[1])} · ${fmt(A.stocks)}종목. 실제로 이렇게 사고팔았다고 치고 계산: 반반 나눠 사고(2차는 지정가), 1차 매도에서 절반 팔고 손절선을 본전으로, 2차 매도에서 나머지, 손절선 닿으면 전부 정리, 최대 20거래일. <b>수수료·세금 0.23% 뺌.</b> 앞 2/3(${pd8(A.train[0])}~${pd8(A.train[1])})로 규칙을 고르고, <b>뒤 1/3(${pd8(A.test[0])}~)은 고를 때 보지 않고 확인만</b> 했어요.</div>
       ${tab('te', '확인 기간 (안 보고 고름)')}${tab('tr', '고른 기간')}
       <ul class="why"><li><b>승률</b> = 이익으로 끝난 매매 비율 · <b>손익비</b> = 평균 이익 ÷ 평균 손실 · <b>기대수익</b> = 한 번 매매할 때 평균적으로 남은 수익(계획한 금액 대비).</li>
@@ -542,7 +544,7 @@ async function openWeights() {
       <div class="disc">과거 결과가 미래 수익을 보장하지 않아요. 지금 상장된 종목만 봐서(생존 편향) 실제보다 좋게 나왔을 수 있고, 약 3년·한 시장·장 마감 가격 체결 가정이에요. 10번 중 4~5번은 손실로 끝났어요.</div></div>`;
   }
   const m = modal(`<div class="sheet-h"><b>점수는 이렇게 매겨요</b><button class="mini" id="mcancel">닫기</button></div>
-    <div class="meta">종목 점수는 6가지 항목을 더해 10점 만점이에요. <b>돈 흐름(거래 꾸준·외국인·기관·오늘 거래대금)이 6점</b>, 안정성·추세·과열이 4점. 배점은 과거 매매 시뮬레이션에서 <b>1번 매매당 기대수익</b>이 가장 안정적으로 높았던 조합으로 정했어요.</div>
+    <div class="meta">종목 점수는 6가지 항목을 더해 10점 만점이에요. <b>돈 흐름(거래 꾸준·외국인·기관·오늘 거래대금)이 6점</b>, 안정성·추세·과열이 4점. 배점은 과거 매매 시뮬레이션에서 1번 매매당 기대수익이 가장 안정적으로 높았던 조합으로 정했어요. <b>단, 계좌 전체로는 확인 1년 수익이 −1~+1%에 그쳐서 v2.0부터는 보조 화면</b>이에요.</div>
     <div class="wstack">${stack}</div>
     <div class="wlegend">${W.map(([n, w, c]) => `<span><span class="dot" style="background:${c}"></span>${n} ${w}</span>`).join('')}</div>
     ${rows}
@@ -649,6 +651,76 @@ function shareHelpCard() {
     <div class="meta" style="margin-top:8px">공유하는 건 앱 주소뿐이에요. 내 종목·평단·계획은 이 폰에만 있고 같이 가지 않아요.</div></div>`;
 }
 // ---------- 화면 ----------
+// ---------- 주도주 로테이션 (v2.0, bt10 '가장 안정적' 규칙) ----------
+let LEAD = null, LEAD_TRIED = false;
+async function loadLead() {
+  LEAD_TRIED = true;
+  try { const r = await fetch('leaders.json?t=' + Date.now(), { cache: 'no-store' }); if (r.ok) LEAD = await r.json(); } catch {}
+  return LEAD;
+}
+const d8 = s => s ? `${+s.slice(4, 6)}/${+s.slice(6, 8)}(${'일월화수목금토'[new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)).getDay()]})` : '–';
+function breadthSpark(hist, th) {
+  if (!hist || hist.length < 5) return '';
+  const W = 300, H = 64, xs = i => (i / (hist.length - 1)) * W, ys = v => H - (Math.min(100, Math.max(0, v)) / 100) * H;
+  const pts = hist.map(([, v], i) => `${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
+  return `<svg class="bspark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="최근 60거래일 시장 폭">
+    <line x1="0" x2="${W}" y1="${ys(th)}" y2="${ys(th)}" class="th"/><polyline points="${pts}" class="ln"/></svg>
+    <div class="meta row"><span>${d8(hist[0][0])}</span><span>점선 = ${th}% 기준</span><span>${d8(hist[hist.length - 1][0])}</span></div>`;
+}
+function leadCard(x, on) {
+  const inA = ALL[x.code];
+  return `<div class="card lcard"><div class="row"><b>${logo(x.code, x.n)}${esc(x.n)} <span class="meta">${esc(x.code)} · ${esc(x.sec)}</span></b>
+      ${on ? '<span class="tag t-on">비중 1/9</span>' : '<span class="tag t-off">신호 켜지면 후보, 지금은 매수 아님</span>'}</div>
+    <div class="lgrid"><div><span class="meta">종가</span><b>${fmt(x.c)}원</b></div><div><span class="meta">52주 고점 대비</span><b>${x.hi > 0 ? '+' : ''}${x.hi}%</b></div>
+      <div><span class="meta">20일선</span><b>${fmt(x.ma20)}원</b></div><div><span class="meta">손절선(−15%)</span><b class="dn">${fmt(x.stop)}원</b></div></div>
+    <div class="meta">20일 평균 거래대금 ${fmt(x.tv20)}억 · 손절선은 오늘 종가에 샀다고 칠 때 값 (실제는 <b>내 매수가 × 0.85</b>, 종가로 확인)${inA ? ` · <a href="#" data-act="info" data-code="${esc(x.code)}">종목 정보</a>` : ''}</div></div>`;
+}
+function realBox() {
+  return `<div class="card real"><b>현실적인 기대치</b><ul class="why">
+    <li>과거 약 3년(23.11~26.11) 자료로 시험해 본 결과, 다음날 시가에 사고 체결 손실까지 넣으면 <b>연 20~40% 안팎, 최대 하락 −15~−25%</b> 정도가 현실적인 범위였어요. (종가 체결·운 좋은 요일 기준 연 56%는 위쪽 끝 숫자예요)</li>
+    <li>수익은 <b>몇 달에 몰려서</b> 나요. 한 달 수익 중앙값은 +0.3% 정도로, 제자리이거나 조금 잃는 달이 흔하고 시간의 약 30%는 현금으로 쉬어요. 직전 최고점을 회복하지 못한 기간이 길게는 약 6개월(125거래일), 연속으로 잃은 주가 최대 5주였어요.</li>
+    <li>같은 규칙을 다른 요일에 점검하면 결과가 연 24~56%로 크게 달랐어요. 돈을 5개로 나눠 요일마다 조금씩 운용하면 최대 하락이 약 −10~−11%로 가장 작았어요.</li>
+    <li>지금 상장된 종목만으로 계산(생존 편향, 상장폐지 위험 반영 시 연 −1%p 안팎)했고, 업종은 지금의 네이버 분류를 과거에도 썼어요. <b>과거 결과가 미래 수익을 보장하지 않아요.</b></li></ul></div>`;
+}
+function checklist() {
+  return `<div class="card"><b>매주 할 일 (체크리스트)</b><ol class="why chk">
+    <li><b>월요일 장 마감 뒤</b> 이 화면을 열어 시장 폭을 봐요. <b>45% 미만이면 전부 현금</b>으로 두고 끝.</li>
+    <li>45% 이상이면 <b>2주 연속 상위 3 업종</b>의 후보만 써요 (한 주 더 필요한 업종은 다음 주에).</li>
+    <li>업종당 최대 3종목, 투자금을 <b>9칸으로 나눠 1칸씩</b>. 후보가 모자라면 빈 칸은 현금.</li>
+    <li><b>화요일 시가 부근에 지정가로 나눠서</b> 사요. 급하게 시장가로 따라가지 않기.</li>
+    <li>목록에서 빠진 종목은 팔아요. <b>종가가 내 매수가보다 −15%면</b> 다음 날 팔아요.</li>
+    <li><b>관리종목·거래정지·감사의견 문제</b>가 있는 종목은 조건에 맞아도 빼요. (앱이 관리종목·거래정지는 자동으로 빼지만 직접 한 번 더 확인)</li>
+    <li>더 안정적으로 하고 싶으면 돈을 5개로 나눠 월~금 요일마다 1개씩 같은 규칙으로 점검해도 돼요.</li></ol></div>`;
+}
+function viewLead() {
+  const D = LEAD;
+  if (!D && LEAD_TRIED) return '<div class="card">주도주 데이터를 아직 못 불러왔어요. 잠시 뒤 새로고침해 주세요. (장 마감 뒤 계산돼요)</div>' + discLine();
+  if (!D) { loadLead().then(() => { if (TAB === 'lead') render(); }); return '<div class="card">주도주 데이터를 불러오는 중이에요… (장 마감 뒤 하루 한 번 계산해요)</div>' + discLine(); }
+  const B = D.breadth, th = Math.round(D.rule.br * 100), on = D.on;
+  const st = on ? `<span class="lstat on">매수 가능</span>` : `<span class="lstat off">전량 현금 대기</span>`;
+  const gauge = `<div class="bgauge"><i style="width:${Math.min(100, B.pct)}%" class="${on ? 'on' : 'off'}"></i><b style="left:${th}%"></b></div>`;
+  const need = on ? `기준 ${th}%보다 ${(B.pct - th).toFixed(1)}%p 위예요.` : `${th}%까지 <b>${fmt(B.need)}종목</b>이 더 60일선 위로 올라와야 해요. (60일선 바로 아래 5% 이내 ${B.near5}종목, 10% 이내 ${B.near10}종목)`;
+  const secs = D.sectors.slice(0, 3).map(s => `<div class="lsec"><div class="row"><b>${s.pos}위 ${esc(s.n)}</b>${s.q ? '<span class="tag t-on">2주 연속 · 자격</span>' : '<span class="tag t-wait">이번 주 처음 · 한 주 더 필요</span>'}</div>
+      <div class="meta">거래대금 비중 평소의 ${s.sh}배 (최근 10일 중 ${s.sus}%가 늘어난 날) · 60일 수익 시장보다 ${s.rs60 > 0 ? '+' : ''}${s.rs60}%p · 52주 고점 근처 ${s.bhi}% · ${s.m}종목</div></div>`).join('');
+  const rest = D.sectors.slice(3).map(s => `${s.pos}위 ${esc(s.n)}`).join(' · ');
+  const slots = Math.max(0, 9 - D.picks.length);
+  const picks = D.picks.length ? D.picks.map(x => leadCard(x, on)).join('') : '<div class="card meta">2주 연속 업종 안에 조건(20일선 위·52주 고점 10% 안)에 맞는 종목이 없어요.</div>';
+  const nxt = (D.next || []).length ? `<h3>다음 주 후보 (업종이 한 주 더 상위 3이면)</h3>${D.next.map(x => leadCard(x, false)).join('')}` : '';
+  const exc = (D.excluded || []).length ? `<div class="meta hint">자동 제외: ${D.excluded.map(x => `${esc(x.n)}(${esc(x.why)})`).join(', ')}</div>` : '';
+  return `<div class="card lhead"><div class="row"><b>주도주 로테이션</b><span class="meta">${d8(D.asof)} 장 마감 기준</span></div>
+      <div class="lbig">${B.pct}% ${st}</div>${gauge}
+      <div class="meta">시장 폭 = 유동성 종목 ${fmt(B.n)}개 중 60일 평균선 위 ${fmt(B.above)}개. ${need}</div>
+      ${on ? '' : '<div class="ladvice">지금은 <b>새로 사지 않고 현금으로 기다리는</b> 때예요. 아래 종목은 신호가 켜지면 살 후보로만 보세요.</div>'}
+      ${breadthSpark(B.hist, th)}</div>
+    <h2>이번 주 주도 업종 Top 3</h2><div class="meta hint">업종 점수 = 거래대금 비중이 꾸준히 늘었나 + 60일 수익이 시장보다 좋은가 + 52주 고점 근처 종목이 많은가. 지난주 점검일(${d8(D.prev_check)})에도 3위 안이었던 업종만 자격이 있어요. 공식 점검은 <b>월요일 장 마감 뒤</b> 값이에요.</div>
+    <div class="card">${secs}${rest ? `<div class="meta" style="margin-top:6px">그다음: ${rest}</div>` : ''}</div>
+    <h2>후보 종목 (${D.picks.length}/9칸${slots ? ` · 빈 ${slots}칸은 현금` : ''})</h2>
+    <div class="meta hint">자격 업종마다 20일선 위 · 52주 고점 10% 안 종목을 고점에 가까운 순으로 최대 3개. 한 칸 = 투자금의 1/9.</div>
+    ${picks}${exc}${nxt}
+    ${checklist()}${realBox()}
+    <div class="meta hint">데이터: 네이버 금융 일봉(수정주가), 관리종목은 KRX KIND 목록${D.admin_ok ? '' : ' (오늘은 확인 실패 → 직접 확인하세요)'} · 계산 ${kst(D.made)} · 검사 ${fmt(D.stocks)}종목</div>
+    ${discLine()}`;
+}
 function viewHome() {
   const D = DATA, K = D.index.KOSPI, Kq = D.index.KOSDAQ;
   return installCard() + `<div class="card headline">${esc(D.headline)}</div>
@@ -724,10 +796,10 @@ function viewBuy() {
   if (!ANALYSIS) loadAnalysis().then(() => { if (TAB === 'buy') render(); });
   const R = ANALYSIS && ANALYSIS.v === 3 && ANALYSIS.new[String(th)], C = R && ANALYSIS.cur;
   const sg = v => (v > 0 ? '+' : '') + v + '%';
-  const odds = R ? `<div class="card odds"><div class="row"><b>과거 같은 조건으로 사고팔았다면 (확인 기간 ${pd8(ANALYSIS.test[0])}~)</b><button class="linkbtn" data-act="weights">ⓘ 자세히</button></div>
-      <div class="oddsrow"><div><span class="big">${R.te.승률}%</span><span class="meta">승률</span></div><div><span class="big">1:${R.te.손익비}</span><span class="meta">손익비 (평균 이익 ${sg(R.te.평균이익)} · 손실 ${R.te.평균손실}%)</span></div><div><span class="big">${sg(R.te.기대수익)}</span><span class="meta">1번 매매당 기대수익</span></div></div>
-      <div class="meta">수수료·세금 0.23% 뺀 값 · 표본 ${fmt(R.te.n)}건 · v1.8 방식은 ${sg(C.te.기대수익)} (손익비 1:${C.te.손익비}) · 반반 매수·1차 매도 뒤 본전 손절·최대 20거래일 · 과거 성과는 미래를 보장하지 않아요.</div></div>` : '';
-  return `<h2>🎯 점수 좋고 지금 매수 구간인 종목</h2>${discLine('sm')}
+  const odds = `<div class="card odds"><div class="row"><b>이 점수 방식, 계좌 전체로 보면</b><button class="linkbtn" data-act="weights">ⓘ 자세히</button></div>
+      <div class="oddsrow"><div><span class="big mut">−1~+1%</span><span class="meta">확인 1년 계좌 수익<br>(25.11~26.11)</span></div><div><span class="big mut">연 16.9%</span><span class="meta">고른 기간 2년<br>(23.11~25.11)</span></div><div><span class="big mut">−15~−19%</span><span class="meta">확인 기간<br>최대 하락</span></div></div>
+      <div class="meta">돈을 5~10칸으로 나눠 신호 순서대로 샀다고 칠 때(수수료·세금 0.23% 포함). 같은 1년 코스피·<b>주도주 탭 규칙보다 훨씬 낮았어요.</b>${R ? ` 예전에 보여 준 '매매당 ${sg(R.te.기대수익)}'이라는 값은 신호 하나하나를 겹침·자금 제한 없이 평균 낸 값이라 실제 계좌 수익과 달라요.` : ''} 지금 v2.0의 기본 전략은 <a href="#" data-tab="lead">주도주 탭</a>이고, 이 화면은 참고용 보조 화면이에요.</div></div>`;
+  return `<h2>🎯 점수 좋고 지금 매수 구간인 종목 <span class="meta">(v1.9 보조 화면)</span></h2>${discLine('sm')}
     <div class="meta hint">새 점수 ${th.toFixed(1)}점 이상 · 현재가가 매수 구간 안 · 오늘 거래대금 평소 0.7~2.2배 · 과열(+8% 급등·거래 3.5배) 아님 · 20일 평균 거래대금 ${BUY_MIN_TV}억 이상(우선주·스팩 제외) + 내 보유·관심 종목 · 검사 ${fmt(n)}종목</div>
     ${odds}
     <div class="chips">${chips}</div>
@@ -802,7 +874,15 @@ function viewHelp() {
   ${shareHelpCard()}
   <div class="card"><b>화면 테마</b><div class="theme-sel">${[['dark', '다크'], ['light', '라이트'], ['auto', '휴대폰 설정 따르기']].map(([k, n]) => `<button class="chip ${(localStorage.getItem('mf_theme') || 'dark') === k ? 'on' : ''}" data-act="theme" data-v="${k}">${n}</button>`).join('')}</div></div>
   <div class="card">${discLine()}</div>
-  <h2>❓ 점수와 가격선은 이렇게 정해요</h2>
+  <h2>📈 주도주 탭 (v2.0 기본 전략)</h2>
+  <div class="card"><b>규칙</b><ul class="why">
+    <li><b>시장 폭</b>: 20일 평균 거래대금 30억 이상 종목(우선주·스팩·리츠 제외, 120일 이상 거래) 중 종가가 60일 평균선 위인 비율. <b>45% 미만이면 전부 현금</b>.</li>
+    <li><b>업종 점수</b>: 네이버 업종(5종목 이상)마다 ① 거래대금 비중이 평소보다 늘어난 날의 비율(최근 10일) ② 60일 수익률 − 시장 평균 ③ 52주 고점 95% 안 종목 비율을 각각 순위로 바꿔 평균. 이번 주와 지난주 점검일 모두 상위 3인 업종만 자격.</li>
+    <li><b>종목</b>: 자격 업종마다 종가가 20일선 위이고 52주 고점 10% 안인 종목을 고점에 가까운 순으로 최대 3개. 투자금 9칸 중 1칸씩, 빈 칸은 현금. 관리종목·거래정지는 자동 제외.</li>
+    <li><b>파는 때</b>: 다음 주 점검에서 목록에 없으면 정리 · 종가가 매수가 −15% 아래면 다음 날 정리 · 시장 폭이 45% 밑으로 내려가면 전부 정리.</li>
+    <li><b>갱신</b>: 평일 장 마감 뒤(18:10쯤) 하루 한 번 계산해 leaders.json으로 올려요. 화면 위에 몇 월 며칠 장 마감 기준인지 표시돼요. 공식 점검은 월요일 값, 매수는 화요일 시가 부근.</li></ul></div>
+  ${realBox()}
+  <h2>❓ (보조) v1.9 점수와 가격선은 이렇게 정해요</h2>
   <button class="bigbtn" style="width:100%;margin-bottom:12px" data-act="weights">점수는 이렇게 매겨요 · 배점과 과거 검증 보기</button>
   <div class="card"><b>종목 점수 (10점 만점, v1.9)</b><ul class="why">
     <li><b>거래 꾸준 2점</b>: 최근 5거래일(오늘 포함) 중 거래대금이 평소(그 전 20일 평균)보다 많았던 날 수 ÷ 5.</li>
@@ -824,7 +904,7 @@ function viewHelp() {
     <li>업종 Top 5: 상위 종목 거래대금이 너무 작은 업종은 빼요</li></ul></div>
   <div class="card"><b>갱신</b><ul class="why"><li>평일 08:50~15:50 약 10분마다 시세·점수 갱신, 18:10쯤 전 종목 일별 데이터(수급·일봉) 갱신. GitHub 일정상 몇 분 늦을 수 있어요.</li>
     <li>앱은 1분마다 새 데이터를 확인해요. 초 단위 실시간 시세는 아니에요.</li></ul></div>
-  <div class="card"><b>🎯 매수 탭</b><ul class="why"><li>점수가 기준(6.0/6.5/7.0점) 이상이고 현재가가 매수 구간 안에 있는 종목을 점수 높은 순으로 보여줘요.</li><li>전 종목 중 20일 평균 거래대금 30억 이상(우선주·스팩 제외) + 내 보유·관심 종목을 검사해요. 내 계획이 있으면 그 구간으로 판단해요.</li><li>"가까워지는 중"은 매수 구간 위쪽보다 0~3% 위에 있는 종목이에요.</li><li>"52주 신저가" 표시는 아래 지지선이 없어 임시 구간이라 반등 확인 뒤 사는 게 안전해요.</li></ul></div>
+  <div class="card"><b>🎯 점수 탭 (v1.9 보조 화면)</b><ul class="why"><li>점수가 기준(6.0/6.5/7.0점) 이상이고 현재가가 매수 구간 안에 있는 종목을 점수 높은 순으로 보여줘요.</li><li>전 종목 중 20일 평균 거래대금 30억 이상(우선주·스팩 제외) + 내 보유·관심 종목을 검사해요. 내 계획이 있으면 그 구간으로 판단해요.</li><li>"가까워지는 중"은 매수 구간 위쪽보다 0~3% 위에 있는 종목이에요.</li><li>"52주 신저가" 표시는 아래 지지선이 없어 임시 구간이라 반등 확인 뒤 사는 게 안전해요.</li></ul></div>
   <div class="card"><b>내 종목 저장</b><ul class="why"><li>관심·보유 종목, 평단·수량, 스윙 계획은 이 폰에만 저장되고 어디에도 올라가지 않아요. 앱 데이터를 지우면 사라져요.</li></ul>
     <details ${OPEN.has('plan') ? 'open' : ''}><summary data-toggle-keep="plan">⚙️ 내 매매 계획 직접 넣기</summary>${planEditor()}</details></div>`;
 }
@@ -868,7 +948,7 @@ function render(opts = {}) {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === TAB));
   const y = window.scrollY;
   if (TAB === 'mine') TAB = 'hold';
-  app.innerHTML = (TAB === 'home' ? viewHome() : TAB === 'hold' ? viewHold() : TAB === 'watch' ? viewWatch() : TAB === 'buy' ? viewBuy() : TAB === 'find' ? viewFind() : viewHelp())
+  app.innerHTML = (TAB === 'lead' ? viewLead() : TAB === 'home' ? viewHome() : TAB === 'hold' ? viewHold() : TAB === 'watch' ? viewWatch() : TAB === 'buy' ? viewBuy() : TAB === 'find' ? viewFind() : viewHelp())
     + (DATA.errors && DATA.errors.length ? `<div class="card meta">일부 데이터를 못 받았어요: ${DATA.errors.length}건</div>` : '');
   tidy(app);
   window.scrollTo(0, y);
@@ -944,6 +1024,7 @@ async function load(manual) {
     const r = await fetch('data.json?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json(); const changed = !DATA || d.updated !== DATA.updated; DATA = d;
+    if (changed || !LEAD) await loadLead();
     if (changed || !ALL_UPD) {
       try { const a = await (await fetch('all.json?t=' + Date.now(), { cache: 'no-store' })).json(); ALL = a.s || {}; ALL_UPD = a.updated; } catch {}
     }
@@ -999,6 +1080,7 @@ window.addEventListener('scroll', () => { if (!TIP.hidden) { delete TIP.dataset.
 // ---------- 버전 표시 · 새 버전 안내 ----------
 // 예전 버전 화면(index.html)이 남아 있어도 멈추지 않도록 필요한 요소를 직접 만든다
 const ICO = {
+  lead: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m14 6 3-3 3 3"/>',
   home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
   buy: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
   hold: '<rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M8.5 7V5.5A1.5 1.5 0 0 1 10 4h4a1.5 1.5 0 0 1 1.5 1.5V7M3 12.5h18"/>',
@@ -1007,7 +1089,7 @@ const ICO = {
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2.2-2.5 3.6"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>'
 };
 const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[k]}</svg>`;
-const NAV = [['home', '홈'], ['buy', '매수'], ['hold', '보유'], ['watch', '관심'], ['find', '찾기'], ['help', '도움말']]
+const NAV = [['lead', '주도주'], ['home', '시장'], ['buy', '점수'], ['hold', '보유'], ['watch', '관심'], ['find', '찾기'], ['help', '도움말']]
   .map(([t, n], k) => `<button data-tab="${t}"${k ? '' : ' class="on"'} aria-label="${n}">${ico(t)}<span>${n}</span></button>`).join('');
 function applyTheme() {
   const v = localStorage.getItem('mf_theme') || 'dark'; document.documentElement.dataset.theme = v;

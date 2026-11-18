@@ -33,7 +33,7 @@ footer{color:var(--mut);font-size:13px;padding:18px 18px 40px;max-width:640px;ma
 input,textarea{width:100%;background:var(--sunk);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:16px}
 button.btn{background:var(--g);color:#0f172a;border:0;border-radius:10px;padding:10px 14px;font-size:16px;font-weight:800;margin-top:8px}
 table{width:100%;border-collapse:collapse;font-size:15px}td{padding:6px 2px;border-bottom:1px solid var(--line)}td.r{text-align:right}
-nav{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-top:10px}
+nav{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:10px}
 nav button{background:var(--card);color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:6px 1px;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.15;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 nav button.on{background:#e2e8f0;color:#0f172a}
 .hint{margin:-4px 4px 10px}
@@ -271,3 +271,18 @@ html[data-theme=light] .sk::after{background:linear-gradient(90deg,transparent,r
 .atab th:first-child,.atab td:first-child{text-align:left}.atab th{color:var(--mut);font-weight:600;font-size:12.5px}
 .odds .oddsrow{display:flex;gap:8px;margin:10px 0 6px}.odds .oddsrow>div{flex:1;background:var(--card2);border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:2px}
 .odds .big{font-size:22px;font-weight:800;color:var(--acc)}.odds .big.mut{color:var(--tx2)}.odds .linkbtn{margin:0;font-size:13px}
+/* v2.0 주도주 탭 */
+.lhead .lbig{font-size:30px;font-weight:800;letter-spacing:-0.02em;margin:8px 0 6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lstat{font-size:15px;font-weight:800;border-radius:10px;padding:4px 10px}
+.lstat.on{background:rgba(47,202,115,.16);color:var(--g)}.lstat.off{background:rgba(255,93,104,.14);color:var(--r)}
+.bgauge{position:relative;height:12px;border-radius:7px;background:var(--sunk,var(--card2));border:1px solid var(--line);margin:4px 0 8px;overflow:visible}
+.bgauge i{position:absolute;left:0;top:0;bottom:0;border-radius:7px}.bgauge i.on{background:var(--g)}.bgauge i.off{background:var(--r);opacity:.8}
+.bgauge b{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--tx);margin-left:-1px}
+.ladvice{background:rgba(255,93,104,.10);border-radius:12px;padding:10px;margin:10px 0 4px;font-size:14.5px;line-height:1.5}
+.bspark{width:100%;height:64px;margin-top:10px;display:block}.bspark .ln{fill:none;stroke:var(--acc);stroke-width:2;vector-effect:non-scaling-stroke}
+.bspark .th{stroke:var(--mut);stroke-dasharray:4 4;stroke-width:1;vector-effect:non-scaling-stroke}
+.lsec{padding:8px 0;border-bottom:1px solid var(--line2,var(--line))}.lsec:last-of-type{border-bottom:0}
+.t-on{color:var(--g)}.t-wait{color:var(--y)}.t-off{color:var(--y);font-size:12px}
+.lcard .row b{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.lgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0 6px}.lgrid>div{background:var(--card2);border-radius:10px;padding:7px 9px;display:flex;flex-direction:column;gap:1px}
+.real{border:1px solid rgba(242,183,5,.45)}.chk li{margin-bottom:4px}

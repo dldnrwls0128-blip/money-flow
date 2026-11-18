@@ -49,6 +49,11 @@ jobs:
           path: logos
           key: logos-${{ github.run_id }}
           restore-keys: logos-
+      - uses: actions/cache/restore@v4
+        with:
+          path: cache/leaders.json
+          key: leaders-${{ github.run_id }}
+          restore-keys: leaders-
       - name: fetch
         id: fetch
         run: python3 scripts/fetch.py ${{ inputs.force && '--force' || '' }}
@@ -78,6 +83,18 @@ jobs:
         with:
           path: logos
           key: logos-${{ github.run_id }}
+      # 주도주 로테이션 (시장 폭·2주 연속 주도 업종·후보). 장 마감 뒤 하루 1번 새로 계산 (실패해도 배포는 계속)
+      - name: leaders
+        id: leaders
+        if: steps.fetch.outputs.ran == 'true'
+        continue-on-error: true
+        timeout-minutes: 8
+        run: pip install -q pandas numpy && python3 -u scripts/leaders.py ${{ inputs.force && '--force' || '' }}
+      - uses: actions/cache/save@v4
+        if: steps.leaders.outputs.leaders_changed == 'true'
+        with:
+          path: cache/leaders.json
+          key: leaders-${{ github.run_id }}
       # 하루 1번 작은 기록만 커밋 (스케줄이 60일 무활동으로 꺼지지 않게)
       - name: daily heartbeat
         if: steps.fetch.outputs.daily_full == 'true' && github.event_name == 'schedule'
@@ -88,7 +105,7 @@ jobs:
           git add status/last_daily.txt && git commit -m "status: daily refresh" && git push || true
       - name: site
         if: steps.fetch.outputs.ran == 'true'
-        run: mkdir -p _site && cp -r index.html version.js app.js style.css sw.js manifest.webmanifest data.json all.json analysis.json icons logos _site/ && (cp info.json _site/ || true) && touch _site/.nojekyll
+        run: mkdir -p _site && cp -r index.html version.js app.js style.css sw.js manifest.webmanifest data.json all.json analysis.json icons logos _site/ && (cp info.json _site/ || true) && (cp cache/leaders.json _site/leaders.json || true) && touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         if: steps.fetch.outputs.ran == 'true'
         with:
