@@ -125,14 +125,34 @@ def main():
             if per.get(x["sec"], 0) < L: out.append(x); per[x["sec"]] = per.get(x["sec"], 0) + 1
         return out[:K * L]
     picks = take(cand); excluded = [x for x in cand + nxt if x["halt"] or x["admin"]]
+    uu = df[(df.d == asof) & df.sig]; BR_ON = bool((uu.c > uu.ma60).mean() >= BR_TH)
+    # 종목별 주도주 점수 (10점) — bt10 score10.py 와 같은 배점
+    fl = {x["code"] for x in excluded}; posmap = dict(zip(Sd.sec, Sd.pos))
+    Z = df[df.d == asof].copy(); Z["hr"] = Z.c / Z.hi250
+    E = Z[Z.sig & (Z.c > Z.ma20) & (Z.hr >= 1 - NEAR) & ~Z.code.isin(fl)]
+    rk = E.groupby("sec").hr.rank(ascending=False, method="first")
+    Z["rk"] = rk.reindex(Z.index).fillna(0).astype(int)
+    pick_codes = {x["code"] for x in picks}
+    scores = {}
+    for r in Z.itertuples():
+        if not (r.hi250 > 0) or not (r.ma20 > 0): continue
+        sp = int(posmap.get(r.sec, 0)); sec_s = 3 if r.sec in qual else 1.5 if r.sec in now_top else 0.5 if 0 < sp <= 6 else 0
+        hi_s = 2 if r.hr >= 0.95 else 1 if r.hr >= 0.90 else 0
+        ma_s = 1 if r.c > r.ma20 else 0
+        rk_s = 2 if 0 < r.rk <= L else 0
+        br_s = 1 if BR_ON else 0
+        liq_s = 0.5 * (r.tv20s >= 30e8) + 0.5 * (r.c <= 1.25 * r.ma20)
+        tot = sec_s + hi_s + ma_s + rk_s + br_s + liq_s
+        scores[r.code] = dict(t=round(tot, 1), it=[sec_s, hi_s, ma_s, rk_s, br_s, liq_s], h=round((r.hr - 1) * 100, 1), m20=round(float(r.ma20)), c=r.c,
+                              sp=sp, rk=int(r.rk), tv=round(r.tv20s / 1e8), k=int(bool(r.sig)), f=int(r.code in fl), p=int(r.code in pick_codes))
     u = df[(df.d == asof) & df.sig]; gap = u.c / u.ma60 - 1; n = len(u); above = int((gap > 0).sum())
     hist = [[d, round(float(v) * 100, 1)] for d, v in br.tail(60).items()]
-    out = dict(v=1, asof=asof, made=now.isoformat(timespec="seconds"), checked=now.isoformat(timespec="seconds"), prev_check=prev_check, this_week=this_week,
+    out = dict(v=2, asof=asof, made=now.isoformat(timespec="seconds"), checked=now.isoformat(timespec="seconds"), prev_check=prev_check, this_week=this_week,
                rule=dict(br=BR_TH, K=K, L=L, near=NEAR, stop=STOP),
                breadth=dict(pct=round(above / n * 100, 1), above=above, n=n, need=max(0, math.ceil(BR_TH * n) - above),
                             near5=int(((gap <= 0) & (gap > -0.05)).sum()), near10=int(((gap <= 0) & (gap > -0.10)).sum()), hist=hist),
                on=bool(above / n >= BR_TH), sectors=sectors, qual=sorted(qual), picks=picks, next=take(nxt), excluded=[dict(code=x["code"], n=x["n"], why="거래정지" if x["halt"] else "관리종목") for x in excluded],
-               admin_ok=admin_ok, stocks=len(frames), errors=ERR[:5])
+               admin_ok=admin_ok, stocks=len(frames), errors=ERR[:5], score_items=["업종 주도 지속", "52주 고점 근접", "업종 안 상위 3", "20일선 위", "시장 폭", "유동성·과열 아님"], score_max=[3, 2, 2, 1, 1, 1], scores=scores)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(out, open(OUT, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     if os.environ.get("GITHUB_OUTPUT"): open(os.environ["GITHUB_OUTPUT"], "a").write("leaders_changed=true\n")

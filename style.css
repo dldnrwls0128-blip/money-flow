@@ -33,7 +33,7 @@ footer{color:var(--mut);font-size:13px;padding:18px 18px 40px;max-width:640px;ma
 input,textarea{width:100%;background:var(--sunk);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:16px}
 button.btn{background:var(--g);color:#0f172a;border:0;border-radius:10px;padding:10px 14px;font-size:16px;font-weight:800;margin-top:8px}
 table{width:100%;border-collapse:collapse;font-size:15px}td{padding:6px 2px;border-bottom:1px solid var(--line)}td.r{text-align:right}
-nav{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:10px}
+nav{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-top:10px}
 nav button{background:var(--card);color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:6px 1px;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.15;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 nav button.on{background:#e2e8f0;color:#0f172a}
 .hint{margin:-4px 4px 10px}
@@ -286,3 +286,9 @@ html[data-theme=light] .sk::after{background:linear-gradient(90deg,transparent,r
 .lcard .row b{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .lgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0 6px}.lgrid>div{background:var(--card2);border-radius:10px;padding:7px 9px;display:flex;flex-direction:column;gap:1px}
 .real{border:1px solid rgba(242,183,5,.45)}.chk li{margin-bottom:4px}
+.lsc{font-size:22px;font-weight:800;border-radius:12px;padding:4px 10px;background:var(--card2);cursor:pointer}.lsc small{font-size:12px;color:var(--mut);font-weight:700}
+.lsc.c-g{color:var(--g)}.lsc.c-y{color:var(--y)}.lsc.c-r{color:var(--r)}
+.hadv{border-radius:12px;padding:9px 11px;margin:8px 0;font-size:14.5px;line-height:1.5;background:var(--card2)}
+.hadv.s-g{background:rgba(47,202,115,.13)}.hadv.s-r{background:rgba(255,93,104,.12)}.hadv.s-y{background:rgba(242,183,5,.13)}
+.idxline{margin:0 4px 10px}
+.fstate.s-g{color:var(--g)}.fstate.s-y{color:var(--y)}.fstate.s-r{color:var(--r)}.fstate.s-n{color:var(--mut)}
